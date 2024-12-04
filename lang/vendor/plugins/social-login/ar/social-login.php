@@ -1,0 +1,62 @@
+<?php
+
+return [
+    'settings' => [
+        'title' => 'إعدادات تسجيل الدخول الاجتماعي',
+        'description' => 'تكوين خيارات تسجيل الدخول الاجتماعي',
+        'facebook' => [
+            'title' => 'Facebook login settings',
+            'description' => 'Enable/disable & configure app credentials for Facebook login',
+            'app_id' => 'معرف التطبيق',
+            'app_secret' => 'سر التطبيق',
+            'helper' => 'يرجى الانتقال إلى https://developers.facebook.com لإنشاء تحديث جديد للتطبيق معرف التطبيق وسر التطبيق. عنوان URL للاتصال هو :callback',
+            'enable' => 'تمكين تسجيل الدخول الفيسبوك',
+            'data_deletion_request_callback_url' => 'قم بتعيين عنوان URL هذا :url كعنوان URL لطلب حذف البيانات في إعدادات تطبيق Facebook الخاص بك للسماح للمستخدمين بطلب حذف بياناتهم.',
+        ],
+        'google' => [
+            'title' => 'Google login settings',
+            'description' => 'Enable/disable & configure app credentials for Google login',
+            'app_id' => 'معرف التطبيق',
+            'app_secret' => 'سر التطبيق',
+            'helper' => 'يرجى الانتقال إلى https://console.developers.google.com/apis/dashboard لإنشاء معرف تطبيق تحديث جديد وسر التطبيق. عنوان URL للاتصال هو :callback',
+            'enable' => 'تمكين تسجيل الدخول إلى جوجل',
+        ],
+        'github' => [
+            'title' => 'Github login settings',
+            'description' => 'Enable/disable & configure app credentials for Github login',
+            'app_id' => 'معرف التطبيق',
+            'app_secret' => 'سر التطبيق',
+            'helper' => 'يرجى الانتقال إلى https://github.com/settings/developers لإنشاء معرف تطبيق تحديث جديد، وسر التطبيق. عنوان URL الخاص بالاستدعاء هو :callback',
+            'enable' => 'تمكين تسجيل الدخول إلى GitHub',
+        ],
+        'linkedin' => [
+            'title' => 'Linkedin login settings',
+            'description' => 'Enable/disable & configure app credentials for Linkedin login',
+            'app_id' => 'معرف التطبيق',
+            'app_secret' => 'سر التطبيق',
+            'helper' => 'يرجى الانتقال إلى https://www.linkedin.com/developers/apps/new لإنشاء معرف تطبيق تحديث جديد وسر التطبيق. عنوان URL للاتصال هو :callback',
+            'enable' => 'تمكين تسجيل الدخول Linkedin',
+        ],
+        'enable' => 'تفعيل تسجيل الدخول الاجتماعي؟',
+        'linkedin-openid' => [
+            'enable' => 'تمكين Linkedin باستخدام تسجيل الدخول OpenID Connect',
+            'app_id' => 'معرف التطبيق',
+            'app_secret' => 'سر التطبيق',
+            'helper' => 'يرجى الانتقال إلى https://www.linkedin.com/developers/apps/new لإنشاء معرف تطبيق تحديث جديد وسر التطبيق. عنوان URL للاتصال هو :callback',
+        ],
+        'style' => 'أسلوب',
+        'minimal' => 'الحد الأدنى',
+        'default' => 'تقصير',
+        'basic' => 'اساسي',
+    ],
+    'socials' => [
+        'facebook' => 'فيسبوك',
+        'google' => 'جوجل',
+        'github' => 'GitHub',
+        'linkedin' => 'Linkedin',
+        'linkedin-openid' => 'Linkedin OpenID الاتصال',
+    ],
+    'menu' => 'تسجيل الدخول الاجتماعي',
+    'description' => 'عرض وتحديث إعدادات تسجيل الدخول الاجتماعي الخاصة بك',
+    'sign_in_with' => 'تسجيل الدخول باستخدام :provider',
+];
