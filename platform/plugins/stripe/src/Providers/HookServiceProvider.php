@@ -96,6 +96,9 @@ class HookServiceProvider extends ServiceProvider
 
     public function checkoutWithStripe(array $data, Request $request): array
     {
+
+        $data['currency'] = 'USD';
+
         if ($data['type'] !== STRIPE_PAYMENT_METHOD_NAME) {
             return $data;
         }
