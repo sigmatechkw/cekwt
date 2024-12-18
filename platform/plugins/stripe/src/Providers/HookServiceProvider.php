@@ -2,13 +2,14 @@
 
 namespace Botble\Stripe\Providers;
 
-use Botble\Base\Facades\Html;
-use Botble\Payment\Enums\PaymentMethodEnum;
-use Botble\Payment\Facades\PaymentMethods;
-use Botble\Stripe\Forms\StripePaymentMethodForm;
-use Botble\Stripe\Services\Gateways\StripePaymentService;
 use Illuminate\Http\Request;
+use Botble\Base\Facades\Html;
 use Illuminate\Support\ServiceProvider;
+use Botble\Payment\Facades\PaymentMethods;
+use Botble\Payment\Enums\PaymentMethodEnum;
+use Botble\Stripe\Forms\StripePaymentMethodForm;
+use Symfony\Component\HttpFoundation\Session\Session;
+use Botble\Stripe\Services\Gateways\StripePaymentService;
 
 class HookServiceProvider extends ServiceProvider
 {
@@ -96,6 +97,7 @@ class HookServiceProvider extends ServiceProvider
 
     public function checkoutWithStripe(array $data, Request $request): array
     {
+
         if ($data['type'] !== STRIPE_PAYMENT_METHOD_NAME) {
             return $data;
         }
@@ -126,6 +128,7 @@ class HookServiceProvider extends ServiceProvider
                 }
             }
         }
+
 
         if (! in_array($paymentData['currency'], $supportedCurrencies)) {
             $data['error'] = true;

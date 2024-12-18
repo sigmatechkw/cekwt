@@ -74,6 +74,7 @@ class StripeController extends BaseController
         BaseHttpResponse $response
     ) {
         try {
+
             $stripePaymentService->setClient();
 
             $sessionId = $request->input('session_id');
