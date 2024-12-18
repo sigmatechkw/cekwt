@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7c308a8e0197ca20db3b44974acddfb5",
+    "content-hash": "3b2bf49ce6323a071993d3b709449477",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -495,7 +495,7 @@
         },
         {
             "name": "botble/get-started",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/get-started",
@@ -521,7 +521,7 @@
         },
         {
             "name": "botble/installer",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/installer",
@@ -550,7 +550,7 @@
         },
         {
             "name": "botble/menu",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/menu",
@@ -583,7 +583,7 @@
         },
         {
             "name": "botble/optimize",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/optimize",
@@ -615,7 +615,7 @@
         },
         {
             "name": "botble/page",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/page",
@@ -645,7 +645,7 @@
         },
         {
             "name": "botble/platform",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/core",
@@ -751,7 +751,7 @@
         },
         {
             "name": "botble/plugin-management",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/plugin-management",
@@ -780,7 +780,7 @@
         },
         {
             "name": "botble/revision",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/revision",
@@ -809,7 +809,7 @@
         },
         {
             "name": "botble/seo-helper",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/seo-helper",
@@ -842,7 +842,7 @@
         },
         {
             "name": "botble/shortcode",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/shortcode",
@@ -874,7 +874,7 @@
         },
         {
             "name": "botble/sitemap",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/sitemap",
@@ -903,7 +903,7 @@
         },
         {
             "name": "botble/slug",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/slug",
@@ -935,7 +935,7 @@
         },
         {
             "name": "botble/theme",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/theme",
@@ -976,7 +976,7 @@
         },
         {
             "name": "botble/widget",
-            "version": "dev-main",
+            "version": "dev-mohammed",
             "dist": {
                 "type": "path",
                 "url": "./platform/packages/widget",

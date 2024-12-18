@@ -28,7 +28,7 @@
         "botble/theme": "*@dev",
         "botble/widget": "*@dev",
         "doctrine/dbal": "^3.8",
-        "guzzlehttp/guzzle": "^7.7",
+        "guzzlehttp/guzzle": "*",
         "laravel/framework": "^10.24",
         "laravel/sanctum": "^3.3",
         "laravel/tinker": "^2.9",
