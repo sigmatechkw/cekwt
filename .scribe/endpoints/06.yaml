@@ -1,0 +1,145 @@
+name: Endpoints
+description: ''
+endpoints:
+  -
+    httpMethods:
+      - POST
+    uri: api/v1/ecommerce/checkout/taxes/calculate
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Calculate tax for products in cart'
+      description: ''
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      products:
+        name: products
+        description: 'List of products.'
+        required: true
+        example:
+          -
+            id: 1
+            quantity: 2
+        type: 'string[]'
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      country:
+        name: country
+        description: 'Country code.'
+        required: false
+        example: US
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        custom: []
+      state:
+        name: state
+        description: 'State code.'
+        required: false
+        example: CA
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        custom: []
+      city:
+        name: city
+        description: 'City name.'
+        required: false
+        example: 'Los Angeles'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        custom: []
+      zip_code:
+        name: zip_code
+        description: 'ZIP code.'
+        required: false
+        example: '90001'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: true
+        custom: []
+      'products[].id':
+        name: 'products[].id'
+        description: 'Product ID.'
+        required: true
+        example: 1
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      'products[].quantity':
+        name: 'products[].quantity'
+        description: 'Product quantity.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+    cleanBodyParameters:
+      products:
+        -
+          id: 1
+          quantity: 2
+      country: US
+      state: CA
+      city: 'Los Angeles'
+      zip_code: '90001'
+    fileParameters: []
+    responses:
+      -
+        status: 200
+        content: |-
+          {
+           "items": [
+               {
+                   "product_id": 1,
+                   "price": 100,
+                   "price_formatted": "$100.00",
+                   "quantity": 2,
+                   "tax_rate": 10,
+                   "tax_amount": 20,
+                   "tax_amount_formatted": "$20.00",
+                   "subtotal": 200,
+                   "subtotal_formatted": "$200.00",
+                   "total": 220,
+                   "total_formatted": "$220.00"
+               }
+           ],
+           "totals": {
+               "sub_total": 200,
+               "sub_total_formatted": "$200.00",
+               "tax_amount": 20,
+               "tax_amount_formatted": "$20.00",
+               "total": 220,
+               "total_formatted": "$220.00"
+           }
+          }
+        headers: []
+        description: ''
+        custom: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
