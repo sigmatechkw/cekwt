@@ -22,8 +22,8 @@ jobs:
             #git clean -fd &&
             git pull &&
             rm -rf error_log &&
-            composer update &&
-            composer dump-autoload &&
+            #composer update &&
+            #composer dump-autoload &&
             #php artisan migrate:fresh --seed --force &&
             php artisan migrate --force &&
             php artisan scribe:generate &&
