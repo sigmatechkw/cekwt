@@ -1,0 +1,11 @@
+{
+    "id": "sigmatech/deema",
+    "name": "Deema",
+    "namespace": "Botble\\Deema\\",
+    "provider": "Botble\\Deema\\Providers\\DeemaServiceProvider",
+    "author": "Sigmatech",
+    "url": "",
+    "version": "1.0.0",
+    "description": "Deema Payment Gateway",
+    "minimum_core_version": "7.4.6"
+}

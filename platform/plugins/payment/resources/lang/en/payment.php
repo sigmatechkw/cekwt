@@ -126,4 +126,6 @@ return [
         'request' => 'Request',
         'response' => 'Response',
     ],
+    'api_key' => 'Api Key',
+    'deema_description' => 'Customer can buy product and pay directly via Deema'
 ];
