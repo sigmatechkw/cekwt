@@ -1,41 +1,28 @@
 {
     "Botble\\ACL\\Models\\UserMeta": [
-        "65b83ad065dbeb5292d94ab9580d9273@user-meta-5"
+        "65b83ad065dbeb5292d94ab9580d9273@user-meta-6"
     ],
     "Botble\\Contact\\Models\\Contact": [
         "0c175e4a57799ccc0d2967044852a2f8@unread-contacts",
         "0c175e4a57799ccc0d2967044852a2f8@unread-contacts-count"
     ],
     "Botble\\Ecommerce\\Models\\ProductCategory": [
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_fed2d45f335085c7a35cb2e9058094b5",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_rendering_selectfed2d45f335085c7a35cb2e9058094b5",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_f8321f14688351c71ea129f05c3137e4",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_4f6a0b28a30a63de85a00eca3a5a8d5f",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_rendering_selectf8321f14688351c71ea129f05c3137e4",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_a4025a54a7612d156aa023ca11943f69",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_ec6ec43199eb91e1f95a357684db6f91",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_7e4a3f1f7865b13a4c93c081b9a5166e",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_dbc63a3cb74ff786aeac34f320a8866a",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_50d5b589be229a972054fed0112137b9",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_e27098403f0b29332f8451be8288733d",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_1d0bee804bb1943fe92c6ceeab3776f1",
-        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_ba80aafd88e0824d9f3f186ba50e8b37"
+        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_11194ccbd445ae67262c563616e23e74",
+        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_rendering_select11194ccbd445ae67262c563616e23e74",
+        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_6a3ea0be6e3d7e2f7cf0a445c5663402",
+        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_widgets_1bb8f8af32614555415a69119330063b",
+        "e2df835384821fa5036252a0581ba12b@ecommerce_categories_for_rendering_select6a3ea0be6e3d7e2f7cf0a445c5663402"
     ],
     "Botble\\Ecommerce\\Services\\HandleShippingFeeService": [
-        "66d6c800acf0bbfe034c13e9e2145ba3@4296ad86f9237b52fc572f2912baad85",
-        "66d6c800acf0bbfe034c13e9e2145ba3@a03c669beb9f2dcc4f60309bb59ebc05",
-        "66d6c800acf0bbfe034c13e9e2145ba3@19738696563b5f043fbdbc7d1c2b736c",
-        "66d6c800acf0bbfe034c13e9e2145ba3@86ad905abaee9d9c3c7d4a31af445439",
-        "66d6c800acf0bbfe034c13e9e2145ba3@a85ea21a239437882d7c344e50977983",
-        "66d6c800acf0bbfe034c13e9e2145ba3@9c630b6ea0ceb1dfd5569072d8e284c6",
-        "66d6c800acf0bbfe034c13e9e2145ba3@0c7c96c1cd2691a05bcdd44f35761cd6",
-        "66d6c800acf0bbfe034c13e9e2145ba3@d514d20034379d51ac6d4291221ff37e",
-        "66d6c800acf0bbfe034c13e9e2145ba3@864e8c81c7cc74b7139b9957334f693d",
-        "66d6c800acf0bbfe034c13e9e2145ba3@f551a60af245e675a4c71efb4da02b6f",
-        "66d6c800acf0bbfe034c13e9e2145ba3@639703f49f1c0ab2c90b84784a7a382c",
-        "66d6c800acf0bbfe034c13e9e2145ba3@d0cefe6d781ef1c4bc2c93eaea1d9c70",
-        "66d6c800acf0bbfe034c13e9e2145ba3@3e39a8e3f7e0ba10b14a72a1a3fd01a8",
-        "66d6c800acf0bbfe034c13e9e2145ba3@a505751d844d6e936b8b69f6c7143d36",
-        "66d6c800acf0bbfe034c13e9e2145ba3@0d70106f45a41ff9c29b9cf54386df7e"
+        "66d6c800acf0bbfe034c13e9e2145ba3@17a5f3182f46319043c1007e4311a5c6",
+        "66d6c800acf0bbfe034c13e9e2145ba3@e7bbc0e640af99ff3e8070435a04ef7e",
+        "66d6c800acf0bbfe034c13e9e2145ba3@5cb73db09690b32e49e0280c66ae9ddd",
+        "66d6c800acf0bbfe034c13e9e2145ba3@07a41572ea1472e5705dcdbb267e7720",
+        "66d6c800acf0bbfe034c13e9e2145ba3@b0c605f9484925d14fee80f919f9e945",
+        "66d6c800acf0bbfe034c13e9e2145ba3@d24cf20fca8bcce73049e42a39423ca7",
+        "66d6c800acf0bbfe034c13e9e2145ba3@4e84b2ce9d40481aaf811cc59857b463"
+    ],
+    "Botble\\Base\\Models\\AdminNotification": [
+        "91ca94b722506f03892a158294e61ceb@admin-notifications-count"
     ]
 }
