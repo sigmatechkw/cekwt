@@ -8,5 +8,3 @@ const dist = 'public/vendor/core/plugins/' + directory;
 
 mix
     .js(source + '/resources/assets/js/shippo.js', dist + '/js/shippo.js')
-
-    .copy(dist + '/js/shippo.js', source + '/public/js');
