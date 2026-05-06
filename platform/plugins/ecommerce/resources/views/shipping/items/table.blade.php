@@ -4,12 +4,15 @@
 >
     <table class="table table-striped table-bordered mt-2 table-shipping-rule-{{ $rule->id }}">
         @php
-            $orderBy = request()->input('order_by');
-            $orderDir = request()->input('order_dir');
+            $orderBy = BaseHelper::stringify(request()->input('order_by'));
+            $orderDir = BaseHelper::stringify(request()->input('order_dir'));
             $columns = [
                 'id' => [
                     'title' => '#',
                     'width' => 0,
+                ],
+                'name' => [
+                    'title' => trans('plugins/ecommerce::shipping.rule.item.tables.name'),
                 ],
                 'state' => [
                     'title' => trans('plugins/ecommerce::shipping.rule.item.tables.state'),
@@ -18,7 +21,7 @@
                     'title' => trans('plugins/ecommerce::shipping.rule.item.tables.city'),
                 ],
                 'zip_code' => [
-                    'title' => trans('plugins/ecommerce::shipping.rule.item.tables.zip_code'),
+                    'title' => trans('plugins/ecommerce::shipping.rule.item.tables.zip_range'),
                 ],
                 'adjustment_price' => [
                     'title' => trans('plugins/ecommerce::shipping.rule.item.tables.adjustment_price'),

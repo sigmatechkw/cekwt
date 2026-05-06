@@ -74,19 +74,19 @@
                 </div>
             </div>
 
-    @if ($showEnd)
-        {!! Form::close() !!}
-    @endif
-@endsection
+            @if ($showEnd)
+                {!! Form::close() !!}
+            @endif
+        @endsection
 
-@if ($form->getValidatorClass())
-    @if ($form->isUseInlineJs())
-        {!! Assets::scriptToHtml('jquery') !!}
-        {!! Assets::scriptToHtml('form-validation') !!}
-        {!! $form->renderValidatorJs() !!}
-    @else
-        @push('footer')
-            {!! $form->renderValidatorJs() !!}
-        @endpush
-    @endif
-@endif
+        @if ($form->getValidatorClass())
+            @if ($form->isUseInlineJs())
+                {!! Assets::scriptToHtml('jquery') !!}
+                {!! Assets::scriptToHtml('form-validation') !!}
+                {!! $form->renderValidatorJs() !!}
+            @else
+                @push('footer')
+                    {!! $form->renderValidatorJs() !!}
+                @endpush
+            @endif
+        @endif

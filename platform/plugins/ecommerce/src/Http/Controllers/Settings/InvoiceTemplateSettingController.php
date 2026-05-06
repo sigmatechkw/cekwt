@@ -48,6 +48,8 @@ class InvoiceTemplateSettingController extends SettingController
 
         BaseHelper::saveFileData($filePath, $request->input('content'), false);
 
+        setting()->set('invoice_template_custom_css', $request->input('invoice_template_custom_css'))->save();
+
         return $this
             ->httpResponse()
             ->withUpdatedSuccessMessage();

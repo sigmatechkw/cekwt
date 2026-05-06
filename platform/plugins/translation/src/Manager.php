@@ -74,7 +74,9 @@ class Manager
             Arr::set($translations, $transKey, $transValue);
         }
 
-        $translations = array_merge($englishTranslations, $translations);
+        if (is_array($englishTranslations) && ! empty($englishTranslations)) {
+            $englishTranslations = array_merge($englishTranslations, $translations);
+        }
 
         $file = $locale . DIRECTORY_SEPARATOR . $group;
 
@@ -94,7 +96,13 @@ class Manager
         $path = lang_path($file . '.php');
         $output = "<?php\n\nreturn " . VarExporter::export($translations) . ";\n";
 
-        File::put(str_replace('/', DIRECTORY_SEPARATOR, $path), $output);
+        $path = str_replace('/', DIRECTORY_SEPARATOR, $path);
+
+        File::put($path, $output);
+
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($path, true);
+        }
     }
 
     public function getConfig(?string $key = null): string|array|null
@@ -106,13 +114,17 @@ class Manager
         return $this->config[$key];
     }
 
-    public function removeUnusedThemeTranslations(): bool
+    public function removeUnusedThemeTranslations(?string $theme = null): bool
     {
         if (Theme::hasInheritTheme()) {
             $this->removeUnusedThemeTranslationsFromTheme(Theme::getInheritTheme());
         }
 
-        $this->removeUnusedThemeTranslationsFromTheme(Theme::getThemeName());
+        if (! $theme) {
+            $theme = Theme::getThemeName();
+        }
+
+        $this->removeUnusedThemeTranslationsFromTheme($theme);
 
         return true;
     }
@@ -371,13 +383,17 @@ class Manager
         return array_unique($keys);
     }
 
-    public function updateThemeTranslations(): int
+    public function updateThemeTranslations(?string $theme = null): int
     {
-        $theme = Theme::hasInheritTheme() ? Theme::getInheritTheme() : Theme::getThemeName();
+        if (! $theme) {
+            $theme = Theme::getThemeName();
+        }
+
         $keys = $this->findJsonTranslations(core_path());
         $keys += $this->findJsonTranslations(package_path());
         $keys += $this->findJsonTranslations(plugin_path());
         $keys += $this->findJsonTranslations(theme_path($theme));
+
         ksort($keys);
 
         $data = json_encode($keys, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

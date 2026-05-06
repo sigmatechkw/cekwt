@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Botble\ACL\Database\Seeders\UserSeeder;
 use Botble\Base\Supports\BaseSeeder;
 use Botble\Ecommerce\Database\Seeders\CurrencySeeder;
+use Botble\Ecommerce\Database\Seeders\DiscountSeeder;
 use Botble\Ecommerce\Database\Seeders\ProductSpecificationSeeder;
 use Botble\Ecommerce\Database\Seeders\ReviewSeeder;
 use Botble\Ecommerce\Database\Seeders\ShippingSeeder;
@@ -43,6 +44,7 @@ class DatabaseSeeder extends BaseSeeder
             CustomerSeeder::class,
             ReviewSeeder::class,
             FlashSaleSeeder::class,
+            DiscountSeeder::class,
             MenuSeeder::class,
             GallerySeeder::class,
             TeamSeeder::class,

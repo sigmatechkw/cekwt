@@ -23,7 +23,7 @@
                         @endforeach
                     </div>
                     <br>
-                    {!! apply_filters(BASE_FILTER_PUBLIC_COMMENT_AREA, null) !!}
+                    {!! apply_filters(BASE_FILTER_PUBLIC_COMMENT_AREA, null, $gallery) !!}
                 </div>
             </article>
         </div>

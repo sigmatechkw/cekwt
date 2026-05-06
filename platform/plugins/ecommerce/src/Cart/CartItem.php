@@ -20,6 +20,7 @@ use InvalidArgumentException;
  * @property-read float $tax
  * @property-read float $taxTotal
  */
+#[\AllowDynamicProperties]
 class CartItem implements Arrayable, Jsonable
 {
     public string $rowId;
@@ -37,6 +38,10 @@ class CartItem implements Arrayable, Jsonable
     protected ?string $associatedModel = null;
 
     protected float $taxRate = 0;
+
+    public string|Carbon $updated_at;
+
+    public string|Carbon $created_at;
 
     public function __construct(int|string|null $id, ?string $name, float $price, array $options = [])
     {
@@ -135,31 +140,56 @@ class CartItem implements Arrayable, Jsonable
         return $this->taxRate;
     }
 
+    public function __set($name, $value)
+    {
+        $this->{$name} = $value;
+    }
+
     public function __get($attribute)
     {
         if (property_exists($this, $attribute)) {
             return $this->{$attribute};
         }
 
+        $optionPriceOnce = $this->options->get('option_price_once', 0);
+
         if ($attribute === 'priceTax') {
             if (! EcommerceHelper::isTaxEnabled()) {
                 return 0;
+            }
+
+            $priceIncludesTax = $this->options->get('price_includes_tax', false);
+
+            if ($priceIncludesTax) {
+                return $this->price;
             }
 
             return $this->price + $this->tax;
         }
 
         if ($attribute === 'subtotal') {
-            return $this->qty * $this->price;
+            return EcommerceHelper::roundPrice($this->qty * $this->price + $optionPriceOnce);
         }
 
         if ($attribute === 'total') {
-            return $this->qty * $this->price + $this->tax;
+            $priceIncludesTax = $this->options->get('price_includes_tax', false);
+
+            if ($priceIncludesTax) {
+                return $this->qty * $this->price + $optionPriceOnce;
+            }
+
+            return $this->qty * $this->price + $optionPriceOnce + $this->taxTotal;
         }
 
         if ($attribute === 'tax') {
             if (! EcommerceHelper::isTaxEnabled()) {
                 return 0;
+            }
+
+            $priceIncludesTax = $this->options->get('price_includes_tax', false);
+
+            if ($priceIncludesTax) {
+                return $this->price - ($this->price / (1 + $this->taxRate / 100));
             }
 
             return $this->price * ($this->taxRate / 100);
@@ -170,7 +200,14 @@ class CartItem implements Arrayable, Jsonable
                 return 0;
             }
 
-            return $this->tax * $this->qty;
+            $priceIncludesTax = $this->options->get('price_includes_tax', false);
+            $itemPrice = $this->price * $this->qty + $optionPriceOnce;
+
+            if ($priceIncludesTax) {
+                return EcommerceHelper::roundPrice($itemPrice - ($itemPrice / (1 + $this->taxRate / 100)));
+            }
+
+            return EcommerceHelper::roundPrice($itemPrice * ($this->taxRate / 100));
         }
 
         if ($attribute === 'model') {
@@ -194,7 +231,55 @@ class CartItem implements Arrayable, Jsonable
     {
         $options = Arr::get($attributes, 'options', []);
 
-        return new self($attributes['id'], $attributes['name'], $attributes['price'], $options);
+        $instance = new self(
+            $attributes['id'],
+            $attributes['name'],
+            (float) $attributes['price'],
+            is_array($options) ? $options : []
+        );
+
+        // Restore the exact rowId from storage. The constructor recomputes it
+        // via md5(serialize($options)), but JSON round-trip can coerce numeric
+        // option types (0.0 -> 0), producing a different hash. Without this
+        // override the same product would split into two cart rows instead of
+        // merging qty on re-add.
+        if (! empty($attributes['rowId'])) {
+            $instance->rowId = $attributes['rowId'];
+        }
+
+        if (isset($attributes['qty']) && is_numeric($attributes['qty']) && $attributes['qty'] > 0) {
+            $instance->setQuantity($attributes['qty'] + 0);
+        }
+
+        if (isset($attributes['tax_rate'])) {
+            $instance->setTaxRate((float) $attributes['tax_rate']);
+        }
+
+        if (! empty($attributes['associated_model']) && is_string($attributes['associated_model'])) {
+            $instance->associate($attributes['associated_model']);
+        }
+
+        $instance->created_at = self::parseTimestamp($attributes['created_at'] ?? null) ?? $instance->created_at;
+        $instance->updated_at = self::parseTimestamp($attributes['updated_at'] ?? null) ?? $instance->updated_at;
+
+        return $instance;
+    }
+
+    protected static function parseTimestamp(mixed $value): ?Carbon
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        if ($value instanceof Carbon) {
+            return $value;
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public static function fromAttributes(int|string|null $id, string $name, float $price, array $options = []): self
@@ -217,11 +302,29 @@ class CartItem implements Arrayable, Jsonable
             'name' => $this->name,
             'qty' => $this->qty,
             'price' => $this->price,
-            'options' => $this->options->toArray(),
+            'options' => $this->options instanceof Collection
+                ? $this->options->toArray()
+                : (array) $this->options,
             'tax' => $this->tax,
             'subtotal' => $this->subtotal,
-            'updated_at' => $this->updated_at,
+            'updated_at' => $this->updated_at instanceof Carbon
+                ? $this->updated_at->toIso8601String()
+                : $this->updated_at,
         ];
+    }
+
+    // Extended shape used ONLY by Cart::putToSession to persist across request.
+    // Includes internal fields (taxRate, associatedModel, created_at) that should
+    // NOT leak through toArray() / toJson() to API consumers.
+    public function toSessionArray(): array
+    {
+        return array_merge($this->toArray(), [
+            'tax_rate' => $this->taxRate,
+            'associated_model' => $this->associatedModel,
+            'created_at' => $this->created_at instanceof Carbon
+                ? $this->created_at->toIso8601String()
+                : $this->created_at,
+        ]);
     }
 
     public function toJson($options = 0): string

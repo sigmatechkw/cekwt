@@ -1,10 +1,13 @@
 @use '../utils' as *;
 
-.tp-slide-item {
-    position: relative;
+section.slider-area {
     @media #{$xs} {
         margin-bottom: 20px;
     }
+}
+
+.tp-slide-item {
+    position: relative;
 
     &__img {
         & img {

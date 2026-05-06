@@ -3,7 +3,7 @@
     data-announcement-ids="{{ $announcementIds }}"
     type="button"
 >
-    <span class="ae-anno-announcement__dismiss-button-label">{{ __('Dismiss') }}</span>
+    <span class="ae-anno-announcement__dismiss-button-label">{{ trans('plugins/announcement::announcements.dismiss') }}</span>
     <svg
         class="ae-anno-announcement__dismiss-button-icon"
         aria-hidden="true"

@@ -14,7 +14,7 @@
                                             </h3>
                                         @endif
                                         @if($slider->description)
-                                            <div>{!! BaseHelper::clean($slider->description) !!}</div>
+                                            <div class="mb-20">{!! BaseHelper::clean($slider->description) !!}</div>
                                         @endif
                                         @if(($actionLabel = $slider->getMetaData('action_label', true)) && $slider->link)
                                             <div class="tpslidertwo__slide-btn d-flex align-items-center">

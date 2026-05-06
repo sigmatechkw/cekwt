@@ -4,6 +4,7 @@ namespace Botble\Ecommerce\Models;
 
 use Botble\Base\Models\BaseModel;
 use Botble\Ecommerce\Enums\ProductTypeEnum;
+use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Media\Facades\RvMedia;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,7 @@ class OrderProduct extends BaseModel
         'weight',
         'price',
         'tax_amount',
+        'tax_breakdown',
         'options',
         'product_options',
         'restock_quantity',
@@ -35,8 +37,26 @@ class OrderProduct extends BaseModel
     protected $casts = [
         'options' => 'json',
         'product_options' => 'json',
+        'tax_breakdown' => 'json',
         'downloaded_at' => 'datetime',
     ];
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::deleted(function (OrderProduct $orderProduct): void {
+            // When an order product is deleted, set the assigned_order_product_id to null
+            // for any license codes that were assigned to this order product
+            ProductLicenseCode::query()
+                ->where('assigned_order_product_id', $orderProduct->id)
+                ->update([
+                    'assigned_order_product_id' => null,
+                    'status' => 'available',
+                    'assigned_at' => null,
+                ]);
+        });
+    }
 
     public function product(): BelongsTo
     {
@@ -48,6 +68,11 @@ class OrderProduct extends BaseModel
         return $this->belongsTo(Order::class)->withDefault();
     }
 
+    public function taxComponents(): HasMany
+    {
+        return $this->hasMany(OrderProductTaxComponent::class);
+    }
+
     public function productFiles(): HasMany
     {
         return $this->hasMany(ProductFile::class, 'product_id', 'product_id');
@@ -55,7 +80,9 @@ class OrderProduct extends BaseModel
 
     public function totalFormat(): Attribute
     {
-        return Attribute::get(fn () => format_price($this->price * $this->qty));
+        return Attribute::get(function () {
+            return format_price(EcommerceHelper::roundPrice($this->price * $this->qty));
+        });
     }
 
     public function productImageUrl(): Attribute
@@ -81,6 +108,11 @@ class OrderProduct extends BaseModel
     public function isTypeDigital(): bool
     {
         return isset($this->attributes['product_type']) && $this->attributes['product_type'] == ProductTypeEnum::DIGITAL;
+    }
+
+    public function hasFiles(): bool
+    {
+        return $this->product_file_internal_count > 0 || $this->product_file_external_count > 0;
     }
 
     protected function downloadToken(): Attribute
@@ -112,12 +144,40 @@ class OrderProduct extends BaseModel
 
     protected function priceWithTax(): Attribute
     {
-        return Attribute::get(fn () => $this->price + $this->tax_amount);
+        return Attribute::get(function () {
+            // When the product was sold tax-inclusive, `price` already contains tax;
+            // adding `tax_amount` would double-count it.
+            if (Arr::get($this->options ?? [], 'price_includes_tax')) {
+                return $this->price;
+            }
+
+            return $this->price + $this->tax_amount;
+        });
     }
 
     protected function totalPriceWithTax(): Attribute
     {
         return Attribute::get(fn () => $this->price_with_tax * $this->qty);
+    }
+
+    protected function licenseCodesArray(): Attribute
+    {
+        return Attribute::get(function () {
+            if (! $this->license_code) {
+                return [];
+            }
+
+            // Try to decode as JSON first
+            $decoded = json_decode($this->license_code, true);
+
+            // If it's a valid JSON array, return it
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+
+            // Otherwise, return the single license code as an array for consistency
+            return [$this->license_code];
+        });
     }
 
     public function productOptionsImplode(): Attribute

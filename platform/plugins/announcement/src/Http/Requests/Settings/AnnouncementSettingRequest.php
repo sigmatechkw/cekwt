@@ -20,7 +20,7 @@ class AnnouncementSettingRequest extends Request
             'announcement_max_width_unit' => ['required', 'string', Rule::in(WidthUnit::values())],
             'announcement_text_alignment' => ['required', 'string', Rule::in(TextAlignment::values())],
             'announcement_text_color' => ['required', 'string'],
-            'announcement_background_color' => ['required', 'string'],
+            'announcement_background_color' => ['nullable', 'string'],
             'announcement_font_size' => ['nullable', 'numeric', 'min:0'],
             'announcement_font_size_unit' => ['required', 'string', Rule::in(FontSizeUnit::values())],
             'announcement_dismissible' => [new OnOffRule()],

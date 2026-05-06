@@ -94,11 +94,18 @@ class PluginManagementController extends BaseController
     {
         $plugin = $request->input('name');
 
-        if (! $this->pluginService->validatePlugin($plugin)) {
+        $validationErrors = $this->pluginService->getPluginValidationErrors($plugin);
+
+        if (! empty($validationErrors)) {
+            $details = collect($validationErrors)
+                ->map(fn (array $messages, string $field) => sprintf('%s (%s)', $field, implode('; ', $messages)))
+                ->values()
+                ->implode(', ');
+
             return $this
                 ->httpResponse()
                 ->setError()
-                ->setMessage(trans('packages/plugin-management::plugin.invalid_plugin'));
+                ->setMessage(trans('packages/plugin-management::plugin.invalid_plugin_with_errors', ['errors' => $details]));
         }
 
         try {
@@ -183,7 +190,7 @@ class PluginManagementController extends BaseController
                     'pluginName' => $content['id'],
                     'existing_plugins_on_marketplace' => $existingPluginsOnMarketplace,
                 ])
-                ->setMessage(__('packages/plugin-management::plugin.requirement_not_met', [
+                ->setMessage(trans('packages/plugin-management::plugin.requirement_not_met', [
                     'plugin' => "<strong>{$content['name']}</strong>",
                     'required_plugins' => '<strong>' . implode(', ', $requiredPlugins) . '</strong>',
                 ]));

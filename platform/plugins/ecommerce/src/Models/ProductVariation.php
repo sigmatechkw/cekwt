@@ -5,6 +5,7 @@ namespace Botble\Ecommerce\Models;
 use Botble\Base\Events\CreatedContentEvent;
 use Botble\Base\Events\DeletedContentEvent;
 use Botble\Base\Models\BaseModel;
+use Botble\Ecommerce\Events\ProductQuantityUpdatedEvent;
 use Botble\Ecommerce\Services\Products\UpdateDefaultProductService;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,18 @@ class ProductVariation extends BaseModel
 
     protected static function booted(): void
     {
+        self::created(function (ProductVariation $variation): void {
+            if ($variation->configurable_product_id) {
+                Product::query()
+                    ->where('id', $variation->configurable_product_id)
+                    ->update([
+                        'variations_count' => ProductVariation::query()
+                            ->where('configurable_product_id', $variation->configurable_product_id)
+                            ->count(),
+                    ]);
+            }
+        });
+
         self::deleted(function (ProductVariation $variation): void {
             $variation->productAttributes()->detach();
             $variation->variationItems()->delete();
@@ -33,11 +46,23 @@ class ProductVariation extends BaseModel
                 $variation->product->delete();
                 event(new DeletedContentEvent(PRODUCT_MODULE_SCREEN_NAME, request(), $variation->product));
             }
+
+            if ($variation->configurable_product_id) {
+                Product::query()
+                    ->where('id', $variation->configurable_product_id)
+                    ->update([
+                        'variations_count' => ProductVariation::query()
+                            ->where('configurable_product_id', $variation->configurable_product_id)
+                            ->count(),
+                    ]);
+            }
         });
 
         self::updated(function (ProductVariation $variation): void {
             if ($variation->is_default) {
                 app(UpdateDefaultProductService::class)->execute($variation->product);
+
+                ProductQuantityUpdatedEvent::dispatch($variation->product);
             }
         });
     }
@@ -64,7 +89,7 @@ class ProductVariation extends BaseModel
             'ec_product_variation_items',
             'variation_id',
             'attribute_id'
-        );
+        )->using(ProductVariationItem::class);
     }
 
     public function productVariationItems(): HasMany
@@ -122,6 +147,12 @@ class ProductVariation extends BaseModel
             $attributes = [0];
         }
 
+        $quotedAttributes = array_map(function ($attr) {
+            return is_numeric($attr) ? $attr : "'{$attr}'";
+        }, $attributes);
+
+        $quotedProductId = is_numeric($configurableProductId) ? $configurableProductId : "'{$configurableProductId}'";
+
         $items = ProductVariationItem::query()
             ->join(
                 'ec_product_variations',
@@ -135,8 +166,8 @@ class ProductVariation extends BaseModel
                     SELECT ec_product_variation_items.id
                     FROM ec_product_variation_items
                     JOIN ec_product_variations ON ec_product_variations.id = ec_product_variation_items.variation_id
-                    WHERE ec_product_variations.configurable_product_id = ' . $configurableProductId . '
-                    AND ec_product_variation_items.attribute_id NOT IN (' . implode(',', $attributes) . ')
+                    WHERE ec_product_variations.configurable_product_id = ' . $quotedProductId . '
+                    AND ec_product_variation_items.attribute_id NOT IN (' . implode(',', $quotedAttributes) . ')
                 )
             '
             )

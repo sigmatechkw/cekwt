@@ -1,3 +1,5 @@
+<link rel="stylesheet" href="{{ asset('vendor/core/plugins/sale-popup/css/sale-popup.css') }}?v=1.2.1">
+
 <div class="sale-popup-section">
     <div
         class="sale-popup-container-wrap sales_animated hidden oh des_1 slpr_mb_ slpr_has_btns"
@@ -49,7 +51,7 @@
             <div class="sale-popup-info">
                 <span class="sale-popup-location">
                     <span class="js-sale-popup-location"></span>
-                    {{ $salePopupHelper->getSetting('purchased_text', 'purchased') }}
+                    {{ $salePopupHelper->getSetting('purchased_text', trans('plugins/sale-popup::sale-popup.purchased')) }}
                 </span>
                 <a
                     class="js-sale-popup-a sale-popup-title js-sale-popup-tt"
@@ -62,7 +64,7 @@
                     @if ($salePopupHelper->getSetting('show_verified', 1))
                         <span class="sale-popup-verify">
                             <x-core::icon name="ti ti-circle-check" :wrapper="false" />
-                            {{ $salePopupHelper->getSetting('verified_text', 'Verified') }}
+                            {{ $salePopupHelper->getSetting('verified_text', trans('plugins/sale-popup::sale-popup.verified')) }}
                         </span>
                     @endif
                 </div>
@@ -84,8 +86,9 @@
                     data-base-url="{{ url('') }}"
                     href="#"
                     rel="nofollow"
+                    title="{{ $salePopupTitle = $salePopupHelper->getSetting('quick_view_text', trans('plugins/sale-popup::sale-popup.quick_view')) }}"
                 >
-                    <span title="{{ $salePopupHelper->getSetting('quick_view_text', 'Quick view') }}">
+                    <span title="{{ $salePopupTitle }}">
                         <x-core::icon name="ti ti-eye" :wrapper="false" />
                     </span>
                 </a>

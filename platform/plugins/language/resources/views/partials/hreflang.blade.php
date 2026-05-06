@@ -1,23 +1,20 @@
+@php
+    $defaultLocale = Language::getDefaultLocale();
+    $xDefaultUrl = collect($hreflangUrls)->first(function ($url, $code) use ($defaultLocale) {
+        return str_starts_with($code, $defaultLocale);
+    }) ?? rtrim(Language::getLocalizedURL($defaultLocale, url()->current(), [], false), '/');
+@endphp
+
 <link
-    href="{{ Language::getLocalizedURL(Language::getDefaultLocale(), url()->current(), [], false) }}"
+    href="{{ rtrim($xDefaultUrl, '/') }}"
     hreflang="x-default"
     rel="alternate"
 />
 
-@if (!empty($urls))
-    @foreach ($urls as $item)
-        <link
-            href="{{ $item['url'] }}"
-            hreflang="{{ $item['lang_code'] }}"
-            rel="alternate"
-        />
-    @endforeach
-@else
-    @foreach (Language::getSupportedLocales() as $localeCode => $properties)
-        <link
-            href="{{ Language::getLocalizedURL($localeCode, url()->current(), [], false) }}"
-            hreflang="{{ $localeCode }}"
-            rel="alternate"
-        />
-    @endforeach
-@endif
+@foreach ($hreflangUrls as $hreflangCode => $url)
+    <link
+        href="{{ $url }}"
+        hreflang="{{ $hreflangCode }}"
+        rel="alternate"
+    />
+@endforeach

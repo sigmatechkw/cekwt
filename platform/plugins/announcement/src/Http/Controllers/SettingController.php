@@ -24,6 +24,6 @@ class SettingController extends BaseController
         Setting::save();
 
         return $response
-            ->setMessage(trans('core/base::notices.update_success_message'));
+            ->withUpdatedSuccessMessage();
     }
 }

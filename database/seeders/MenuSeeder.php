@@ -6,11 +6,13 @@ use Botble\Base\Supports\BaseSeeder;
 use Botble\Blog\Models\Post;
 use Botble\Ecommerce\Models\Product;
 use Botble\Menu\Database\Traits\HasMenuSeeder;
+use Botble\Page\Database\Traits\HasPageSeeder;
 use Botble\Page\Models\Page;
 
 class MenuSeeder extends BaseSeeder
 {
     use HasMenuSeeder;
+    use HasPageSeeder;
 
     public function run(): void
     {
@@ -92,7 +94,7 @@ class MenuSeeder extends BaseSeeder
                             [
                                 'title' => 'About',
                                 'reference_type' => Page::class,
-                                'reference_id' => 7,
+                                'reference_id' => $this->getPageId('About'),
                             ],
                             [
                                 'title' => 'Sign up',
@@ -104,12 +106,12 @@ class MenuSeeder extends BaseSeeder
                             ],
                             [
                                 'title' => '404 / Error',
-                                'url' => url('/404'),
+                                'url' => '/404',
                             ],
                             [
                                 'title' => 'Coming soon',
                                 'reference_type' => Page::class,
-                                'reference_id' => 9,
+                                'reference_id' => $this->getPageId('Coming soon'),
                             ],
                         ],
                     ],
@@ -120,7 +122,7 @@ class MenuSeeder extends BaseSeeder
                             [
                                 'title' => 'Blog',
                                 'reference_type' => Page::class,
-                                'reference_id' => 6,
+                                'reference_id' => $this->getPageId('Blog'),
                             ],
                             [
                                 'title' => 'Blog Detail',
@@ -131,7 +133,7 @@ class MenuSeeder extends BaseSeeder
                     [
                         'title' => 'Contact',
                         'reference_type' => Page::class,
-                        'reference_id' => 8,
+                        'reference_id' => $this->getPageId('Contact'),
                     ],
                 ],
             ],
@@ -141,28 +143,25 @@ class MenuSeeder extends BaseSeeder
                 'items' => [
                     [
                         'title' => 'Custom Service',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                     [
                         'title' => 'FAQs',
                         'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'reference_id' => $this->getPageId('FAQs'),
                     ],
                     [
                         'title' => 'Order Tracking',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => 'orders/tracking',
                     ],
                     [
-                        'title' => 'Contacts',
+                        'title' => 'Contact',
                         'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'reference_id' => $this->getPageId('Contact'),
                     ],
                     [
                         'title' => 'Events',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                 ],
             ],
@@ -172,28 +171,23 @@ class MenuSeeder extends BaseSeeder
                 'items' => [
                     [
                         'title' => 'Delivery Information',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                     [
                         'title' => 'Privacy Policy',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                     [
                         'title' => 'Discount',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                     [
                         'title' => 'Custom Service',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                     [
                         'title' => 'Terms & Condition',
-                        'reference_type' => Page::class,
-                        'reference_id' => 1,
+                        'url' => '/',
                     ],
                 ],
             ],
@@ -203,28 +197,28 @@ class MenuSeeder extends BaseSeeder
                 'items' => [
                     [
                         'title' => 'Facebook',
-                        'icon_font' => 'fab fa-facebook',
-                        'url' => '#',
+                        'icon_font' => 'ti ti-brand-facebook',
+                        'url' => 'https://facebook.com',
                     ],
                     [
                         'title' => 'Dribble',
-                        'icon_font' => 'fab fa-dribbble',
-                        'url' => '#',
+                        'icon_font' => 'ti ti-brand-dribbble',
+                        'url' => 'https://dribbble.com',
                     ],
                     [
-                        'title' => 'Twitter',
-                        'icon_font' => 'fab fa-twitter',
-                        'url' => '#',
+                        'title' => 'X (Twitter)',
+                        'icon_font' => 'ti ti-brand-x',
+                        'url' => 'https://x.com',
                     ],
                     [
                         'title' => 'Behance',
-                        'icon_font' => 'fab fa-behance',
-                        'url' => '#',
+                        'icon_font' => 'ti ti-brand-behance',
+                        'url' => 'https://behance.com',
                     ],
                     [
-                        'title' => 'Youtube',
-                        'icon_font' => 'fab fa-youtube',
-                        'url' => '#',
+                        'title' => 'YouTube',
+                        'icon_font' => 'ti ti-brand-youtube',
+                        'url' => 'https://youtube.com',
                     ],
                 ],
             ],

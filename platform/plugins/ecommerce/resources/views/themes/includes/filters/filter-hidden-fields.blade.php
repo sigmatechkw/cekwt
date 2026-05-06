@@ -3,8 +3,10 @@
         'layout',
         'page',
         'per-page',
+        'num',
         'sort-by',
         'collection',
+        'discounted_only',
     ] as $item)
         <input
             name="{{ $item }}"
@@ -15,7 +17,10 @@
     @endforeach
 
     @if (request()->has('collections'))
-        @foreach ((array) request()->input('collections', []) as $collection)
+        @php
+            $collections = EcommerceHelper::parseFilterParams(request(), 'collections');
+        @endphp
+        @foreach ($collections as $collection)
             <input
                 name="collections[]"
                 type="hidden"
@@ -26,7 +31,10 @@
     @endif
 
     @if (request()->has('categories') && ! isset($category))
-        @foreach ((array) request()->input('categories', []) as $category)
+        @php
+            $categories = EcommerceHelper::parseFilterParams(request(), 'categories');
+        @endphp
+        @foreach ($categories as $category)
             <input
                 name="categories[]"
                 type="hidden"

@@ -51,6 +51,12 @@ AdminHelper::registerRoutes(function (): void {
                 'permission' => 'reviews.destroy',
             ]);
 
+            Route::put('{review}/badge', [
+                'as' => 'update-badge',
+                'uses' => 'ReviewController@updateBadge',
+                'permission' => 'reviews.index',
+            ]);
+
             Route::post('{review}/publish', [
                 'as' => 'publish',
                 'uses' => 'PublishedReviewController@store',
@@ -101,6 +107,16 @@ Theme::registerRoutes(function (): void {
                 'uses' => 'ReviewController@getProductReview',
                 'as' => 'public.product.review',
                 'middleware' => 'customer',
+            ]);
+
+            Route::post('review/{review}/reply', [
+                'as' => 'public.reviews.reply',
+                'uses' => 'ReviewController@storeReply',
+            ]);
+
+            Route::delete('review/{review}/reply', [
+                'as' => 'public.reviews.reply.destroy',
+                'uses' => 'ReviewController@destroyReply',
             ]);
         });
 

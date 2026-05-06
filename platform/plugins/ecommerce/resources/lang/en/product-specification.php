@@ -1,9 +1,27 @@
 <?php
 
 return [
+    'name' => 'Product Specifications',
     'product_specification' => 'Product Specification',
+
+    'import' => [
+        'name' => 'Import Product Specifications',
+        'description' => 'Import product specifications in bulk by uploading a CSV/Excel file.',
+        'done_message' => 'Updated specifications for :count product(s) successfully.',
+        'rules' => [
+            'name' => 'The product name is required and must match an existing parent product.',
+            'specification_table' => 'The specification table name must match an existing specification table.',
+            'specifications' => 'Specifications should be in "Name:Value" format, separated by "|".',
+            'specifications_locale' => 'Specifications for :locale should be in "Name:Value" format, separated by "|".',
+        ],
+    ],
+
+    'export' => [
+        'description' => 'Export product specifications to a CSV/Excel file.',
+    ],
     'specification_groups' => [
         'title' => 'Specification Groups',
+        'menu_name' => 'Groups',
 
         'create' => [
             'title' => 'Create Specification Group',
@@ -16,11 +34,15 @@ return [
 
     'specification_attributes' => [
         'title' => 'Specification Attributes',
+        'menu_name' => 'Attributes',
 
         'group' => 'Associated Group',
         'group_placeholder' => 'Choose any Group',
+        'name_placeholder' => 'Enter attribute name',
         'type' => 'Field Type',
+        'type_placeholder' => 'Select field type',
         'default_value' => 'Default Value',
+        'default_value_placeholder' => 'Enter default value (optional)',
         'options' => [
             'heading' => 'Options',
 
@@ -40,6 +62,7 @@ return [
 
     'specification_tables' => [
         'title' => 'Specification Tables',
+        'menu_name' => 'Tables',
 
         'create' => [
             'title' => 'Create Specification Table',
@@ -68,6 +91,9 @@ return [
             'value' => 'Attribute value',
             'hide' => 'Hide',
             'sorting' => 'Sorting',
+            'enter_value' => 'Enter value',
+            'enter_translation' => 'Enter translation',
+            'not_set' => 'Not set',
         ],
     ],
 

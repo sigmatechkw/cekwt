@@ -32,13 +32,13 @@ export class ActionsService {
                     selected.push(value.preview_url)
                 }
 
-                RecentItems.push(value.id)
+                // Add to recent items on the server
+                Helpers.addToRecent(value.id)
             }
         })
 
         if (Helpers.size(selected) > 0) {
             Botble.lightbox(selected)
-            Helpers.storeRecentItems()
         } else {
             this.handleGlobalAction('download')
         }
@@ -173,6 +173,9 @@ export class ActionsService {
             case 'alt_text':
                 $('#modal_alt_text_items').modal('show').find('form.form-alt-text').data('action', type)
                 break
+            case 'move':
+                $('#modal_move_items').modal('show')
+                break
             case 'crop':
                 $('#modal_crop_image').modal('show').find('form.rv-form').data('action', type)
                 break
@@ -209,6 +212,9 @@ export class ActionsService {
             case 'properties':
                 $('#modal-properties').modal('show')
 
+                break
+            case 'manage_access':
+                ActionsService.handleManageAccess()
                 break
             default:
                 ActionsService.processAction(
@@ -304,29 +310,36 @@ export class ActionsService {
 
     static renderShareItems() {
         const target = $('#modal_share_items [data-bb-value="share-result"]')
-        const shareType =  $('#modal_share_items select[data-bb-value="share-type"]').val()
+        const shareType = $('#modal_share_items select[data-bb-value="share-type"]').val()
         target.val('')
 
         let results = []
 
         Helpers.each(Helpers.getSelectedItems(), (value) => {
+            // Convert absolute URL to relative URL for HTML and markdown
+            let imageUrl = value.full_url
+            if (
+                (shareType === 'html' || shareType === 'markdown') &&
+                imageUrl &&
+                imageUrl.startsWith(window.location.origin)
+            ) {
+                imageUrl = imageUrl.replace(window.location.origin, '')
+            }
+
             switch (shareType) {
                 case 'html':
                     results.push(
                         value.type === 'image'
-                            ? `<img src="${value.full_url}" alt="${value.alt}" />`
-                            : `<a href="${value.full_url}" target="_blank">${value.alt}</a>`
+                            ? `<img src="${imageUrl}" alt="${value.alt}" />`
+                            : `<a href="${imageUrl}" target="_blank">${value.alt}</a>`
                     )
-                    break;
+                    break
                 case 'markdown':
-                    results.push(
-                        (value.type === 'image' ? '!' : '') +
-                        `[${value.alt}](${value.full_url})`
-                    )
-                    break;
+                    results.push((value.type === 'image' ? '!' : '') + `[${value.alt}](${imageUrl})`)
+                    break
                 case 'indirect_url':
                     results.push(value.indirect_url)
-                    break;
+                    break
                 default:
                     results.push(value.full_url)
             }
@@ -346,11 +359,10 @@ export class ActionsService {
         let actionsList = $.extend({}, true, Helpers.getConfigs().actions_list)
 
         if (hasFolderSelected) {
-            const ignoreActions = ['preview', 'crop', 'alt_text', 'copy_link', 'copy_direct_link', 'share']
+            const ignoreActions = ['preview', 'crop', 'alt_text', 'copy_link', 'copy_indirect_link', 'share']
 
-            actionsList.basic = Helpers.arrayReject(
-                actionsList.basic, (item) => ignoreActions.includes(item.action)
-            )
+            actionsList.basic = Helpers.arrayReject(actionsList.basic, (item) => ignoreActions.includes(item.action))
+            actionsList.file = Helpers.arrayReject(actionsList.file, (item) => ignoreActions.includes(item.action))
 
             if (!Helpers.hasPermission('folders.create')) {
                 actionsList.file = Helpers.arrayReject(actionsList.file, (item) => {
@@ -360,7 +372,7 @@ export class ActionsService {
 
             if (!Helpers.hasPermission('folders.edit')) {
                 actionsList.file = Helpers.arrayReject(actionsList.file, (item) => {
-                    return Helpers.inArray(['rename'], item.action)
+                    return Helpers.inArray(['rename', 'move'], item.action)
                 })
 
                 actionsList.user = Helpers.arrayReject(actionsList.user, (item) => {
@@ -422,7 +434,7 @@ export class ActionsService {
 
             if (!Helpers.hasPermission('files.edit')) {
                 actionsList.file = Helpers.arrayReject(actionsList.file, (item) => {
-                    return Helpers.inArray(['rename'], item.action)
+                    return Helpers.inArray(['rename', 'move'], item.action)
                 })
             }
 
@@ -490,7 +502,7 @@ export class ActionsService {
                         )
                         .replace('__icon__', '<span class="icon-tabler-wrapper dropdown-item-icon">__icon__</span>')
                         .replace('__icon__', item.icon || '')
-                        .replace(/__name__/gi, Helpers.trans(`actions_list.${key}.${item.action}`) || item.name)
+                        .replace(/__name__/gi, Helpers.trans(`actions_list.${key}.${item.action}`, item.name))
 
                     if (item.icon) {
                         template = template.replace('media-icon', 'media-icon dropdown-item-icon')
@@ -521,7 +533,16 @@ export class ActionsService {
             .withResponseType('blob')
             .post(RV_MEDIA_URL.download, { selected: files })
             .then((response) => {
-                const fileName = (response.headers['content-disposition'] || '').split('filename=')[1].split(';')[0]
+                let fileName = 'download'
+                const contentDisposition = response.headers['content-disposition'] || ''
+
+                if (contentDisposition) {
+                    const fileNameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)|filename="?([^";\n]+)"?/i)
+                    if (fileNameMatch) {
+                        fileName = decodeURIComponent(fileNameMatch[1] || fileNameMatch[2])
+                    }
+                }
+
                 const objectUrl = URL.createObjectURL(response.data)
                 const a = document.createElement('a')
 
@@ -536,6 +557,116 @@ export class ActionsService {
             .finally(() => {
                 html.hide()
                 clearTimeout(downloadTimeout)
+            })
+    }
+
+    static handleManageAccess() {
+        let selectedFolders = Helpers.getSelectedFolder()
+        if (!selectedFolders.length) {
+            return
+        }
+
+        let folder = selectedFolders[0]
+        let folderId = folder.id
+        let modal = $('#modal_folder_permissions')
+        let permissionsList = $('#folder-permissions-list')
+        let permUrl = RV_MEDIA_URL.folder_permissions.replace('__FOLDER_ID__', folderId)
+
+        modal.data('folder-id', folderId)
+        modal.modal('show')
+
+        // Load users for the select dropdown
+        $httpClient
+            .make()
+            .get(RV_MEDIA_URL.folder_permissions_users)
+            .then(({ data }) => {
+                let select = $('#folder-permission-user-select')
+                select.empty().append('<option value="">-- Select user --</option>')
+                data.data.forEach((user) => {
+                    let opt = $('<option></option>').val(user.id).text(`${user.name} (${user.email})`)
+                    select.append(opt)
+                })
+            })
+
+        // Load current permissions
+        ActionsService._loadFolderPermissions(folderId, permissionsList, permUrl)
+
+        // Grant permission handler
+        $('#btn-grant-folder-permission')
+            .off('click')
+            .on('click', () => {
+                let userId = $('#folder-permission-user-select').val()
+                let permission = $('#folder-permission-level-select').val()
+                if (!userId) {
+                    return
+                }
+
+                $httpClient
+                    .make()
+                    .post(permUrl, {
+                        user_id: userId,
+                        permission: permission,
+                    })
+                    .then(() => {
+                        ActionsService._loadFolderPermissions(folderId, permissionsList, permUrl)
+                        MessageService.showMessage('success', 'Permission granted', 'Success')
+                    })
+                    .catch(({ response }) => {
+                        MessageService.showMessage('error', response?.data?.message || 'Error', 'Error')
+                    })
+            })
+    }
+
+    static _loadFolderPermissions(folderId, container, permUrl) {
+        container.html('<div class="text-muted text-center py-3">Loading...</div>')
+
+        $httpClient
+            .make()
+            .get(permUrl)
+            .then(({ data }) => {
+                container.empty()
+                if (!data.data || !data.data.length) {
+                    container.html('<div class="text-muted text-center py-3">No permissions set</div>')
+                    return
+                }
+
+                data.data.forEach((perm) => {
+                    let levelBadge =
+                        perm.permission === 'manage'
+                            ? 'bg-danger'
+                            : perm.permission === 'upload'
+                              ? 'bg-warning'
+                              : 'bg-info'
+
+                    let row = $('<div class="list-group-item d-flex justify-content-between align-items-center"></div>')
+                    let info = $('<div></div>')
+                    info.append($('<strong></strong>').text(perm.user_name))
+                    info.append($('<small class="text-muted d-block"></small>').text(perm.user_email))
+                    row.append(info)
+
+                    let actions = $('<div class="d-flex align-items-center gap-2"></div>')
+                    actions.append($(`<span class="badge ${levelBadge}"></span>`).text(perm.permission))
+                    actions.append(
+                        $(`<button type="button" class="btn btn-sm btn-outline-danger btn-revoke-permission"><svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></svg></button>`).data(
+                            'user-id',
+                            perm.user_id
+                        )
+                    )
+                    row.append(actions)
+                    container.append(row)
+                })
+
+                // Revoke permission handler
+                container.find('.btn-revoke-permission').on('click', function () {
+                    let userId = $(this).data('user-id')
+                    $httpClient
+                        .make()
+                        .delete(permUrl + '/' + userId)
+                        .then(() => {
+                            ActionsService._loadFolderPermissions(folderId, container, permUrl)
+                            MessageService.showMessage('success', 'Permission revoked', 'Success')
+                        })
+                })
             })
     }
 }

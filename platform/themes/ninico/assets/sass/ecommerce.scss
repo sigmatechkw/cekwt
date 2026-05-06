@@ -157,76 +157,8 @@
 
 .text-swatch {
     li {
-        display: inline-block;
-        margin-inline-end: 5px;
-
-        input[type='radio'],
-        input[type='checkbox'] {
-            display: none;
-
-            &:checked ~ span {
-                border: 1px solid var(--tp-text-primary);
-
-                &:after {
-                    width: 16px;
-                    height: 16px;
-                    content: '\f00c';
-                    font-family: 'Font Awesome 5 Pro', serif !important;
-                    position: absolute;
-                    overflow: hidden;
-                    inset-inline-end: -8px;
-                    bottom: 2px;
-                    color: #fff;
-                    font-size: 8px;
-                }
-
-                &:before {
-                    border: 16px solid transparent;
-                    border-bottom: 16px solid var(--tp-text-primary);
-                    content: '';
-                    position: absolute;
-                    inset-inline-end: -16px;
-                    bottom: -1px;
-                }
-            }
-        }
-
         span {
             font-size: 14px;
-            color: var(--tp-text-secondary);
-            padding: 5px 15px;
-            border: 1px solid #ccc;
-            background-color: #ffffff;
-            cursor: pointer;
-            transition: 0.2s;
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-
-        &.attribute-swatch-item {
-            &.pe-none {
-                span {
-                    &:before,
-                    &:after {
-                        border-top: 1px dashed #999;
-                        content: '';
-                        height: 0;
-                        inset-inline-start: 0;
-                        position: absolute;
-                        top: 50%;
-                        width: 100%;
-                    }
-
-                    &:before {
-                        transform: rotate(45deg);
-                    }
-
-                    &:after {
-                        transform: rotate(-45deg);
-                    }
-                }
-            }
         }
     }
 }

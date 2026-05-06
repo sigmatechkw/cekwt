@@ -21,7 +21,7 @@ class AdminAppearance
         return $this;
     }
 
-    public function forCurrentUser(string $guard = null): static
+    public function forCurrentUser(?string $guard = null): static
     {
         $auth = auth($guard);
 
@@ -34,9 +34,11 @@ class AdminAppearance
 
     public function getLocale(): string
     {
-        $generalLocale = config('core.base.general.locale', config('app.locale'));
+        $siteLocale = setting('locale', config('core.base.general.locale', config('app.locale')));
 
-        return $this->getUserSetting('locale', $generalLocale);
+        $locale = $this->getUserSetting('locale');
+
+        return $locale ?: $siteLocale;
     }
 
     public function getLocaleDirection(): string

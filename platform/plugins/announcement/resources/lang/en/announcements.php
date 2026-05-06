@@ -53,4 +53,22 @@ return [
     'lazy_loading' => 'Lazy loading',
     'lazy_loading_description' => 'Enable this option to improve page loading speed',
     'hide_on_mobile' => 'Hide on mobile',
+    'dismiss' => 'Dismiss',
+
+    // Placeholders and help texts
+    'name_placeholder' => 'Enter announcement name',
+    'name_help' => 'Name for internal reference only, not visible to users',
+    'content_placeholder' => 'Enter your announcement message here...',
+    'content_help' => 'The message that will be displayed to users. Supports HTML formatting.',
+    'start_date_placeholder' => 'Select start date and time',
+    'start_date_help' => 'Announcement will be visible from this date. Leave empty to start immediately.',
+    'end_date_placeholder' => 'Select end date and time',
+    'end_date_help' => 'Announcement will be hidden after this date. Leave empty for no expiration.',
+    'has_action_help' => 'Add a call-to-action button to your announcement',
+    'action_label_placeholder' => 'e.g., Learn More, Shop Now',
+    'action_label_help' => 'Text displayed on the action button',
+    'action_url_placeholder' => 'https://example.com/page',
+    'action_url_help' => 'URL where users will be redirected when clicking the action button',
+    'action_open_new_tab_help' => 'Open the action link in a new browser tab',
+    'is_active_help' => 'Enable or disable this announcement without deleting it',
 ];

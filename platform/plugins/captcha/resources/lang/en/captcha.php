@@ -48,4 +48,9 @@ return [
     'admin_login_form' => 'Admin login form',
     'admin_forgot_password_form' => 'Admin forgot password form',
     'admin_reset_password_form' => 'Admin reset password form',
+    'captcha' => 'Captcha',
+    'math_captcha' => 'Math Captcha',
+    'math_question' => 'Please solve the following math function: :label = ?',
+    'captcha_verification_failed' => 'Captcha Verification Failed!',
+    'math_captcha_verification_failed' => 'Math Captcha Verification Failed!',
 ];

@@ -9,7 +9,6 @@ use Botble\Media\Facades\RvMedia;
 use Botble\Page\Models\Page;
 use Botble\SeoHelper\Facades\SeoHelper;
 use Botble\Slug\Models\Slug;
-use Botble\Theme\Events\RenderingSingleEvent;
 use Botble\Theme\Facades\Theme;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -33,7 +32,7 @@ class PageService
 
         $page = Page::query()
             ->where($condition)
-            ->with('slugable');
+            ->with(['slugable', 'metadata']);
 
         $page = RepositoryHelper::applyBeforeExecuteQuery($page, new Page(), true)->first();
 
@@ -51,7 +50,7 @@ class PageService
 
             Theme::breadcrumb()->add($page->name, $page->url);
         } else {
-            $siteTitle = theme_option('seo_title') ?: theme_option('site_title');
+            $siteTitle = theme_option('seo_title') ?: Theme::getSiteTitle();
             $seoDescription = theme_option('seo_description');
 
             SeoHelper::setTitle($siteTitle)
@@ -63,7 +62,7 @@ class PageService
         }
 
         SeoHelper::openGraph()->setUrl($page->url);
-        SeoHelper::openGraph()->setType('article');
+        SeoHelper::openGraph()->setType(BaseHelper::isHomepage($page->getKey()) ? 'website' : 'article');
 
         SeoHelper::meta()->setUrl($page->url);
 
@@ -87,8 +86,6 @@ class PageService
         }
 
         do_action(BASE_ACTION_PUBLIC_RENDER_SINGLE, PAGE_MODULE_SCREEN_NAME, $page);
-
-        event(new RenderingSingleEvent($slug ?: new Slug()));
 
         return [
             'view' => 'page',

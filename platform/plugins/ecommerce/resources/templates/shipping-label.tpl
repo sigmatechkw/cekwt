@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html {{ html_attributes }}>
     <head>
         <meta charset="UTF-8">
         <title>{{ 'plugins/ecommerce::shipping.shipping_label.name'|trans }} {{ shipment.code }}</title>
@@ -16,17 +16,145 @@
             }
 
             body {
-                font-size: 14px;
+                font-size: 12px;
                 font-family: '{{ settings.font_family }}', Arial, sans-serif !important;
             }
 
             table {
                 border-collapse: collapse;
-                width: 100%
+                width: 100%;
+                table-layout: fixed;
             }
 
             table tr td {
-                padding: 0
+                padding: 0;
+                vertical-align: top;
+                word-wrap: break-word;
+                overflow: hidden;
+            }
+
+            .sender-table {
+                width: 100%;
+            }
+
+            .sender-table td {
+                vertical-align: top;
+                overflow: hidden;
+            }
+
+            .sender-table .logo-cell {
+                width: 80px;
+                max-width: 80px;
+                text-align: center;
+                padding-left: 8px;
+            }
+
+            .container {
+                min-height: auto;
+                border: 3px solid black;
+                margin: 10px;
+                border-radius: 4px;
+                page-break-inside: avoid;
+                position: relative;
+            }
+
+            .section {
+                padding: 8px 12px;
+                border-bottom: 1px solid black;
+                position: relative;
+            }
+
+            .section:last-child {
+                border-bottom: none;
+            }
+
+            .sender-info h4 {
+                margin: 0 0 2px 0;
+                font-size: 13px;
+                font-weight: bold;
+            }
+
+            .sender-info p {
+                margin: 0 0 1px 0;
+                font-size: 11px;
+            }
+
+            .receiver-info h2 {
+                margin: 0 0 4px 0;
+                font-size: 16px;
+                font-weight: bold;
+            }
+
+            .receiver-info h4 {
+                margin: 0 0 2px 0;
+                font-size: 12px;
+                font-weight: normal;
+            }
+
+            .details-table td {
+                padding-bottom: 6px;
+                width: 33.33%;
+            }
+
+            .details-table td span {
+                font-size: 11px;
+                color: #666;
+            }
+
+            .details-table td h3 {
+                margin: 1px 0 0 0;
+                font-size: 12px;
+                font-weight: bold;
+            }
+
+            .notes-section {
+                padding: 8px 12px;
+            }
+
+            .note-item {
+                margin-bottom: 3px;
+                overflow-wrap: break-word;
+                word-wrap: break-word;
+            }
+
+            .note-item span {
+                font-size: 11px;
+                color: #666;
+            }
+
+            .note-item strong {
+                font-weight: bold;
+            }
+
+            .qr-section {
+                margin-top: 8px;
+            }
+
+            .qr-section td:first-child {
+                width: 100px;
+                text-align: center;
+            }
+
+            .qr-section td:last-child {
+                font-size: 11px;
+                padding-left: 10px;
+                vertical-align: middle;
+            }
+
+            .qr-code {
+                max-height: 100px;
+                width: auto;
+                height: auto;
+                display: block;
+            }
+
+            .logo {
+                max-width: 80px;
+                max-height: 60px;
+                width: auto;
+                height: auto;
+                display: block;
+                object-fit: contain;
             }
 
             {{ settings.extra_css }}
@@ -34,48 +162,48 @@
 
         {{ settings.header_html }}
     </head>
-    <body>
-        <div style="height: 94%; border: 3px solid black; margin: 20px; border-radius: 4px;">
-            <div style="padding: 20px; border-bottom: 1px solid black;">
-                <table>
+    <body {{ body_attributes }}>
+        <div class="container">
+            <div class="section">
+                <table class="sender-table">
                     <tr>
-                        <td style="vertical-align: top; width: 18%;">
+                        <td style="width: 18%;">
                             {{ 'plugins/ecommerce::shipping.shipping_label.sender'|trans }}:
                         </td>
-                        <td style="vertical-align: top">
+                        <td class="sender-info">
                             <h4>{{ sender.name }}</h4>
                             <p>{{ sender.full_address }}</p>
                             <p>{{ sender.phone }}</p>
                             <p>{{ sender.email }}</p>
                         </td>
                         {% if sender.logo %}
-                            <td style="vertical-align: top; width: 10%">
-                                <img src="{{ sender.logo }}" alt="{{ sender.name }}" style="max-width: 120px; width: 100%: height: auto;">
+                            <td class="logo-cell">
+                                <img src="{{ sender.logo }}" alt="{{ sender.name }}" class="logo">
                             </td>
                         {% endif %}
                     </tr>
                 </table>
             </div>
 
-            <div style="padding: 20px; border-bottom: 1px solid black;">
-                <h2 style="margin-bottom: 10px">{{ receiver.name }}</h2>
-                <h4 style="margin-bottom: 6px">{{ receiver.full_address }}</h4>
-                <h4 style="margin-bottom: 6px">{{ receiver.email }}</h4>
-                <h4 style="margin-bottom: 6px">{{ receiver.phone }}</h4>
+            <div class="section receiver-info">
+                <h2>{{ receiver.name }}</h2>
+                <h4>{{ receiver.full_address }}</h4>
+                <h4>{{ receiver.email }}</h4>
+                <h4>{{ receiver.phone }}</h4>
             </div>
 
-            <div style="padding: 20px; border-bottom: 1px solid black">
-                <table>
+            <div class="section">
+                <table class="details-table">
                     <tr>
-                        <td style="padding-bottom: 14px;">
+                        <td>
                             <span>{{ 'plugins/ecommerce::shipping.shipment_id'|trans }}:</span>
                             <h3>{{ shipment.code }}</h3>
                         </td>
-                        <td style="padding-bottom: 14px;">
+                        <td>
                             <span>{{ 'plugins/ecommerce::shipping.order_id'|trans }}:</span>
                             <h3>{{ shipment.order_number }}</h3>
                         </td>
-                        <td style="padding-bottom: 14px;">
+                        <td>
                             <span>{{ 'plugins/ecommerce::shipping.shipping_label.order_date'|trans }}:</span>
                             <h3>{{ shipment.created_at }}</h3>
                         </td>
@@ -94,29 +222,41 @@
                             <h3>{{ shipment.shipping_fee }}</h3>
                         </td>
                     </tr>
+                    <tr>
+                        <td colspan="3">
+                            <span>{{ 'plugins/ecommerce::shipping.shipping_label.total_amount'|trans }}:</span>
+                            <h3>{{ shipment.order.amount }}</h3>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">
+                            <span>{{ 'plugins/ecommerce::shipping.shipping_label.amount_to_collect'|trans }}:</span>
+                            <h2 style="margin: 1px 0 0 0; font-size: 16px; font-weight: bold;">{{ shipment.total_collectable_amount }}</h2>
+                        </td>
+                    </tr>
                 </table>
             </div>
-            <div style="padding: 20px;">
+            <div class="notes-section">
                 {% if shipment.note %}
-                    <div style="margin-bottom: 6px; overflow-wrap: break-word;">
+                    <div class="note-item">
                         <span>{{ 'plugins/ecommerce::shipping.delivery_note'|trans }}:</span>
                         <strong>{{ shipment.note }}</strong>
                     </div>
                 {% endif %}
 
                 {% if receiver.note %}
-                <div style="margin-bottom: 6px; overflow-wrap: break-word;">
+                <div class="note-item">
                     <span>{{ 'plugins/ecommerce::shipping.customer_note'|trans }}:</span>
                     <strong>{{ receiver.note }}</strong>
                 </div>
                 {% endif %}
 
-                <table style="margin-top: 20px">
+                <table class="qr-section">
                     <tr>
                         <td>
-                            <img src="data:image/svg+xml;base64,{{ shipment.qr_code }}" style="max-height: 160px; width: auto%; height: auto;" alt="QR code">
+                            <img src="data:image/svg+xml;base64,{{ shipment.qr_code }}" class="qr-code" alt="QR code">
                         </td>
-                        <td style="font-size: 12px;">
+                        <td>
                             {{ 'plugins/ecommerce::shipping.shipping_label.scan_qr_code'|trans }}
                         </td>
                     </tr>

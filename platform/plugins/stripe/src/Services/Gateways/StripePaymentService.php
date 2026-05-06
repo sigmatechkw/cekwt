@@ -46,6 +46,8 @@ class StripePaymentService extends StripePaymentAbstract
                 return null;
             }
 
+            // The amount already includes the payment fee from the checkout controller
+
             $charge = Charge::create([
                 'amount' => $this->convertAmount($this->amount),
                 'currency' => $this->currency,
@@ -54,7 +56,10 @@ class StripePaymentService extends StripePaymentAbstract
                     'order_id' => implode(', #', $data['order_id']),
                     'site_url' => $request->getHost(),
                 ]),
-                'metadata' => ['order_id' => json_encode($data['order_id'])],
+                'metadata' => [
+                    'order_id' => json_encode($data['order_id']),
+                    'payment_fee' => Arr::get($data, 'payment_fee', 0),
+                ],
             ]);
 
             $this->chargeId = $charge['id'];
@@ -86,6 +91,25 @@ class StripePaymentService extends StripePaymentAbstract
             ];
         }
 
+        // Add payment fee as a separate line item if it exists
+        $paymentFee = Arr::get($data, 'payment_fee', 0);
+
+        if ($paymentFee > 0) {
+            $lineItems[] = [
+                'price_data' => [
+                    'product_data' => [
+                        'name' => trans('plugins/payment::payment.payment_fee'),
+                        'description' => trans('plugins/payment::payment.payment_fee'),
+                    ],
+                    'unit_amount' => $this->convertAmount($paymentFee),
+                    'currency' => $this->currency,
+                ],
+                'quantity' => 1,
+            ];
+        }
+
+        // The amount already includes the payment fee from the checkout controller
+        // We also add the payment fee as a separate line item for transparency
         $requestData = [
             'line_items' => $lineItems,
             'mode' => 'payment',
@@ -100,6 +124,7 @@ class StripePaymentService extends StripePaymentAbstract
                 'customer_type' => Arr::get($data, 'customer_type'),
                 'return_url' => Arr::get($data, 'return_url'),
                 'callback_url' => Arr::get($data, 'callback_url'),
+                'payment_fee' => Arr::get($data, 'payment_fee', 0),
             ],
         ];
 
@@ -144,6 +169,9 @@ class StripePaymentService extends StripePaymentAbstract
 
     public function afterMakePayment(string $chargeId, array $data): string
     {
+        $paymentStatus = PaymentStatusEnum::FAILED;
+        $actualChargedAmount = $data['amount'];
+
         try {
             do_action('payment_before_making_api_request', STRIPE_PAYMENT_METHOD_NAME, ['id' => $chargeId]);
 
@@ -153,15 +181,20 @@ class StripePaymentService extends StripePaymentAbstract
 
             if ($payment && ($payment->paid || $payment->status == 'succeeded')) {
                 $paymentStatus = PaymentStatusEnum::COMPLETED;
-            } else {
-                $paymentStatus = PaymentStatusEnum::FAILED;
+
+                $multiplier = StripeHelper::getStripeCurrencyMultiplier($this->currency);
+                $actualChargedAmount = $payment->amount;
+
+                if ($multiplier > 1) {
+                    $actualChargedAmount = $actualChargedAmount / $multiplier;
+                }
             }
         } catch (Exception) {
             $paymentStatus = PaymentStatusEnum::FAILED;
         }
 
         do_action(PAYMENT_ACTION_PAYMENT_PROCESSED, [
-            'amount' => $data['amount'],
+            'amount' => $actualChargedAmount,
             'currency' => $data['currency'],
             'charge_id' => $chargeId,
             'order_id' => (array) $data['order_id'],
@@ -169,6 +202,7 @@ class StripePaymentService extends StripePaymentAbstract
             'customer_type' => Arr::get($data, 'customer_type'),
             'payment_channel' => STRIPE_PAYMENT_METHOD_NAME,
             'status' => $paymentStatus,
+            'payment_fee' => Arr::get($data, 'payment_fee', 0),
         ]);
 
         return $chargeId;

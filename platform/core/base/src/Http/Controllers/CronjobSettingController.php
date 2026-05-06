@@ -12,11 +12,13 @@ class CronjobSettingController extends BaseSystemController
 {
     public function index(): View
     {
-        $this->pageTitle(trans('core/setting::setting.cronjob.name'));
+        $this->pageTitle(trans('core/setting::cronjob.name'));
+
+        $phpPath = (new PhpExecutableFinder())->find(false);
 
         $command = sprintf(
             '* * * * * %s %s/artisan schedule:run >> /dev/null 2>&1',
-            (new PhpExecutableFinder())->find(false),
+            $phpPath ?: 'php',
             BaseHelper::hasDemoModeEnabled() ? 'path-to-your-project' : base_path()
         );
 

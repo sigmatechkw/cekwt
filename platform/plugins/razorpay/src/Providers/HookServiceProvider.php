@@ -71,7 +71,7 @@ class HookServiceProvider extends ServiceProvider
                 $paymentDetail = $paymentService->getPaymentDetails($payment->charge_id);
 
                 if ($paymentDetail) {
-                    $data = view('plugins/razorpay::detail', ['payment' => $paymentDetail, 'paymentModel' => $payment])->render();
+                    $data .= view('plugins/razorpay::detail', ['payment' => $paymentDetail, 'paymentModel' => $payment])->render();
                 }
             }
 
@@ -115,11 +115,16 @@ class HookServiceProvider extends ServiceProvider
         $data['errorMessage'] = null;
         $data['orderId'] = null;
 
+        $paymentService = new RazorpayPaymentService();
+        $minimumAmount = $paymentService->getMinimumOrderAmount();
+        $data['minimumAmount'] = $minimumAmount;
+        $data['orderAmount'] = $data['amount'] ?? 0;
+
         if (get_payment_setting(
             'payment_type',
             RAZORPAY_PAYMENT_METHOD_NAME,
             'hosted_checkout',
-        ) == 'website_embedded') {
+        ) == 'website_embedded' && (float) ($data['amount'] ?? 0) >= $minimumAmount) {
             try {
                 $api = new Api($apiKey, $apiSecret);
 
@@ -161,11 +166,23 @@ class HookServiceProvider extends ServiceProvider
 
         $paymentData = apply_filters(PAYMENT_FILTER_PAYMENT_DATA, [], $request);
 
+        $paymentService = new RazorpayPaymentService();
+        $minimumAmount = $paymentService->getMinimumOrderAmount();
+
+        if ((float) $paymentData['amount'] < $minimumAmount) {
+            $data['error'] = true;
+            $data['message'] = trans('plugins/razorpay::razorpay.minimum_amount_error', [
+                'amount' => format_price($minimumAmount),
+            ]);
+
+            return $data;
+        }
+
         $data['charge_id'] = $request->input('razorpay_payment_id');
 
         if (! $data['charge_id']) {
             $data['error'] = true;
-            $data['message'] = __('Payment failed!');
+            $data['message'] = trans('plugins/razorpay::razorpay.payment_failed');
         }
 
         $amount = (int) round($paymentData['amount'] * 100);
@@ -188,6 +205,13 @@ class HookServiceProvider extends ServiceProvider
                 'receipt' => $receiptId,
                 'amount' => $amount,
                 'currency' => $data['currency'],
+                'notes' => [
+                    'order_id' => is_array($paymentData['order_id']) ? implode(',', $paymentData['order_id']) : $paymentData['order_id'],
+                    'order_token' => $paymentData['checkout_token'],
+                    'customer_name' => $paymentData['address']['name'],
+                    'customer_email' => $paymentData['address']['email'],
+                    'customer_phone' => $paymentData['address']['phone'],
+                ],
             ];
 
             do_action('payment_before_making_api_request', RAZORPAY_PAYMENT_METHOD_NAME, $requestData);
@@ -217,9 +241,11 @@ class HookServiceProvider extends ServiceProvider
                 'prefill[name]' => $paymentData['address']['name'],
                 'prefill[email]' => $paymentData['address']['email'],
                 'prefill[contact]' => $paymentData['address']['phone'],
-                'notes' => [
-                    ...$paymentService->getOrderNotes(),
-                ],
+                'notes[order_id]' => is_array($paymentData['order_id']) ? implode(',', $paymentData['order_id']) : $paymentData['order_id'],
+                'notes[order_token]' => $paymentData['checkout_token'],
+                'notes[customer_name]' => $paymentData['address']['name'],
+                'notes[customer_email]' => $paymentData['address']['email'],
+                'notes[customer_phone]' => $paymentData['address']['phone'],
             ]);
         } else {
             try {

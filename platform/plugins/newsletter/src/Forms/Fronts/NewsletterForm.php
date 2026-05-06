@@ -38,14 +38,14 @@ class NewsletterForm extends FormFront
                     ->cssClass('')
                     ->wrapperAttributes(false)
                     ->maxLength(-1)
-                    ->placeholder(__('Enter Your Email'))
+                    ->placeholder(trans('plugins/newsletter::newsletter.enter_your_email'))
                     ->addAttribute('id', 'newsletter-email')
             )
             ->add(
                 'submit',
                 'submit',
                 ButtonFieldOption::make()
-                    ->label(__('Subscribe'))
+                    ->label(trans('plugins/newsletter::newsletter.subscribe'))
                     ->cssClass('btn btn-primary'),
             )
             ->add('wrapper_after', HtmlField::class, HtmlFieldOption::make()->content('</div>'))

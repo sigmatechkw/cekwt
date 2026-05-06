@@ -10,10 +10,16 @@
     >
         <x-slot name="currencyNotSupportedMessage">
             <p class="mt-1 mb-0">
-                {{ __('Learn more') }}:
+                {{ trans('plugins/razorpay::razorpay.learn_more') }}:
                 {{ Html::link('https://razorpay.com/docs/payments/payments/international-payments/#supported-currencies', attributes: ['target' => '_blank', 'rel' => 'nofollow']) }}.
             </p>
         </x-slot>
+
+        @if (isset($minimumAmount) && isset($orderAmount) && (float) $orderAmount < (float) $minimumAmount)
+            <div class="alert alert-warning my-2">
+                {{ trans('plugins/razorpay::razorpay.minimum_amount_warning', ['amount' => format_price($minimumAmount)]) }}
+            </div>
+        @endif
 
         @if ($errorMessage)
             <div class="text-danger my-2">
@@ -98,6 +104,39 @@
                                 'contact': $(document).find('#address_phone').val()
                             },
                             'notes' : @json($paymentService->getOrderNotes()),
+                            'config': {
+                                'display': {
+                                    'blocks': {
+                                        'utib': {
+                                            'name': 'Pay using UPI',
+                                            'instruments': [
+                                                {
+                                                    'method': 'upi'
+                                                }
+                                            ]
+                                        },
+                                        'other': {
+                                            'name': 'Other Payment modes',
+                                            'instruments': [
+                                                {
+                                                    'method': 'card',
+                                                    'issuers': ['HDFC', 'ICIC', 'SBIN', 'AXIS', 'UTIB', 'KKBK', 'YESB', 'INDB']
+                                                },
+                                                {
+                                                    'method': 'netbanking'
+                                                },
+                                                {
+                                                    'method': 'wallet'
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    'sequence': ['block.utib', 'block.other'],
+                                    'preferences': {
+                                        'show_default_blocks': false
+                                    }
+                                }
+                            }
                         });
                         window.rzpay.open();
                     });
@@ -109,7 +148,7 @@
                     let agreeTermsAndPolicy = $('#agree_terms_and_policy');
 
                     if (agreeTermsAndPolicy.length && ! agreeTermsAndPolicy.is(':checked')) {
-                        alert('{{ __('Please agree to the terms and conditions before proceeding.') }}');
+                        alert('{{ trans('plugins/razorpay::razorpay.agree_terms') }}');
                         return;
                     }
 

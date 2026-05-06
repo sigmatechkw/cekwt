@@ -18,7 +18,7 @@ class PluginManagement {
                 .delete(_self.data('url'))
                 .then(({ data }) => {
                     Botble.showSuccess(data.message)
-                    window.location.reload()
+                    setTimeout(() => window.location.reload(), 1000)
                 })
                 .finally(() => $('#remove-plugin-modal').modal('hide'))
         })
@@ -37,6 +37,9 @@ class PluginManagement {
                 .post(url)
                 .then(({ data }) => {
                     Botble.showSuccess(data.message)
+
+                    localStorage.removeItem('plugin_update_check_time')
+                    localStorage.removeItem('plugin_update_data')
 
                     setTimeout(() => window.location.reload(), 2000)
                 })
@@ -89,15 +92,58 @@ class PluginManagement {
     }
 
     handleFilters() {
-        let search = $('[data-bb-toggle="change-search"]').val().toLowerCase()
-        let status = $('[data-bb-toggle="change-filter-plugin-status"]:checked').val()
+        const $searchInput = $('[data-bb-toggle="change-search"]')
+        const urlParams = new URLSearchParams(window.location.search)
+        const savedSearch = urlParams.get('search') || ''
+        const savedStatus = urlParams.get('status') || ''
+        const defaultStatus = $('input[data-bb-toggle="change-filter-plugin-status"]').first().val()
+
+        if (savedSearch) {
+            $searchInput.val(savedSearch)
+        }
+
+        if (savedStatus) {
+            const $radio = $(`input[data-bb-toggle="change-filter-plugin-status"][value="${savedStatus}"]`)
+            if ($radio.length) {
+                $('input[data-bb-toggle="change-filter-plugin-status"]').prop('checked', false)
+                $radio.prop('checked', true)
+            }
+
+            const $dropdownItem = $(`button[data-bb-toggle="change-filter-plugin-status"][data-value="${savedStatus}"]`)
+            if ($dropdownItem.length) {
+                $('button[data-bb-toggle="change-filter-plugin-status"]').removeClass('active')
+                $dropdownItem.addClass('active')
+                $('[data-bb-toggle="status-filter-label"]').text($dropdownItem.text())
+            }
+        }
+
+        let search = $searchInput.val().toLowerCase()
+        let status = $('input[data-bb-toggle="change-filter-plugin-status"]:checked').val()
 
         $('button[data-bb-toggle="change-filter-plugin-status"]').each((index, element) => {
-            const status = $(element).data('value') || $(element).val()
-            const $visiblePluginItems =
-                status === 'all' ? $('.plugin-item:visible') : $(`.plugin-item[data-status="${status}"]:visible`)
-            $(`[data-bb-toggle="plugins-count"][data-status="${status}"]`).text($visiblePluginItems.length)
+            const itemStatus = $(element).data('value') || $(element).val()
+            const $pluginItems =
+                itemStatus === 'all' ? $('.plugin-item') : $(`.plugin-item[data-status="${itemStatus}"]`)
+            $(`[data-bb-toggle="plugins-count"][data-status="${itemStatus}"]`).text($pluginItems.length)
         })
+
+        const updateUrlParams = () => {
+            const url = new URL(window.location.href)
+
+            if (search) {
+                url.searchParams.set('search', search)
+            } else {
+                url.searchParams.delete('search')
+            }
+
+            if (status && status !== defaultStatus) {
+                url.searchParams.set('status', status)
+            } else {
+                url.searchParams.delete('status')
+            }
+
+            window.history.replaceState({}, '', url)
+        }
 
         const applyFilters = () => {
             const $pluginItems = $('.plugin-item')
@@ -137,11 +183,13 @@ class PluginManagement {
 
             search = $(event.currentTarget).val().toLowerCase()
             applyFilters()
+            updateUrlParams()
         })
 
         $(document).on('change', 'input[data-bb-toggle="change-filter-plugin-status"]', (event) => {
             status = $(event.currentTarget).val()
             applyFilters()
+            updateUrlParams()
         })
 
         $(document).on('click', 'button[data-bb-toggle="change-filter-plugin-status"]', (event) => {
@@ -154,34 +202,87 @@ class PluginManagement {
 
             status = newValue
             applyFilters()
+            updateUrlParams()
         })
+
+        if (savedSearch || savedStatus) {
+            applyFilters()
+        }
     }
 
     checkUpdate() {
+        // Check if we should make the update check request
+        const shouldCheckUpdate = () => {
+            const lastCheckTime = localStorage.getItem('plugin_update_check_time')
+            if (!lastCheckTime) {
+                return true
+            }
+
+            // Call once every 15 minutes (900000 ms)
+            const fifteenMinutesInMs = 15 * 60 * 1000
+            return Date.now() - parseInt(lastCheckTime) > fifteenMinutesInMs
+        }
+
+        // Try to get cached update data
+        const cachedUpdateData = localStorage.getItem('plugin_update_data')
+
+        if (cachedUpdateData && !shouldCheckUpdate()) {
+            try {
+                const data = JSON.parse(cachedUpdateData)
+                this.processUpdateData(data)
+                return
+            } catch (e) {
+                // If there's an error parsing the cached data, proceed with the request
+            }
+        }
+
+        if (!shouldCheckUpdate()) {
+            return
+        }
+
         $httpClient
             .make()
             .post($('button[data-check-update]').data('check-update-url'))
             .then(({ data }) => {
+                // Store the current time as the last check time
+                localStorage.setItem('plugin_update_check_time', Date.now().toString())
+
                 if (!data.data) {
+                    localStorage.removeItem('plugin_update_data')
                     return
                 }
 
-                Object.keys(data.data).forEach((key) => {
-                    const plugin = data.data[key]
+                // Store the update data
+                localStorage.setItem('plugin_update_data', JSON.stringify(data.data))
 
-                    const $button = $(`button[data-check-update="${plugin.name}"]`)
-
-                    const url = $button.data('update-url').replace('__id__', plugin.id)
-
-                    $button.data('update-url', url).show()
-
-                    const $parent = $button.closest('.plugin-item')
-
-                    $parent.data('available-for-updates', true).trigger('change')
-
-                    $('[data-bb-toggle="plugins-count"][data-status="updates-available"]').text(data.data.length)
-                })
+                this.processUpdateData(data.data)
             })
+            .catch(() => {
+                // Even on error, we've made the request, so store the time
+                localStorage.setItem('plugin_update_check_time', Date.now().toString())
+            })
+    }
+
+    processUpdateData(data) {
+        if (!data) {
+            return
+        }
+
+        Object.keys(data).forEach((key) => {
+            const plugin = data[key]
+
+            const $button = $(`button[data-check-update="${plugin.name}"]`)
+
+            const url = $button.data('update-url').replace('__id__', plugin.id)
+
+            $button.data('update-url', url).show()
+
+            const $parent = $button.closest('.plugin-item')
+
+            $parent.data('available-for-updates', true).trigger('change')
+
+            $('[data-bb-toggle="plugins-count"][data-status="updates-available"]').text(Object.keys(data).length)
+        })
     }
 
     async activateOrDeactivatePlugin(url, reload = true) {
@@ -192,7 +293,7 @@ class PluginManagement {
                 Botble.showSuccess(data.message)
 
                 if (reload) {
-                    window.location.reload()
+                    setTimeout(() => window.location.reload(), 1000)
                 }
             })
     }

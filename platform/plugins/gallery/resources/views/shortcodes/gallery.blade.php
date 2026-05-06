@@ -1,17 +1,23 @@
 @if (function_exists('get_galleries') && $galleries->isNotEmpty())
+    @php
+        Gallery::registerAssets();
+    @endphp
     <div class="gallery-wrap">
         @foreach ($galleries as $gallery)
             <div class="gallery-item">
                 <div class="img-wrap">
-                    <a href="{{ $gallery->url }}" class="d-inline-block">
-                        {{ RvMedia::image($gallery->image, $gallery->name, 'medium') }}
+                    <a
+                        href="{{ $gallery->url }}"
+                        class="d-inline-block"
+                    >
+                        {{ RvMedia::image($gallery->image, $gallery->name, $imageSize ?? 'medium') }}
                     </a>
                 </div>
                 <div class="gallery-detail">
                     <div class="gallery-title"><a href="{{ $gallery->url }}">{{ $gallery->name }}</a></div>
                     @if (trim($gallery->user->name))
                         <div class="gallery-author">
-                            {{ __('By :name', ['name' => $gallery->user->name]) }}
+                            {{ trans('plugins/gallery::gallery.by_name', ['name' => $gallery->user->name]) }}
                         </div>
                     @endif
                 </div>

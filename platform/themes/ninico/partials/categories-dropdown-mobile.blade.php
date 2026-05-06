@@ -12,7 +12,7 @@
         <li @class(['has-dropdown' => $hasChildren])>
             <a href="{{ route('public.single', $category->url) }}">
                 @if ($categoryImage = $category->icon_image)
-                    <img src="{{ RvMedia::getImageUrl($categoryImage) }}" alt="{{ $category->name }}" width="18" height="18" class="me-1">
+                    <img src="{{ RvMedia::getImageUrl($categoryImage) }}" alt="{{ $category->name }}" class="category-icon me-1">
                 @elseif ($categoryIcon = $category->icon)
                     <i class="{{ $categoryIcon }}"></i>
                 @endif

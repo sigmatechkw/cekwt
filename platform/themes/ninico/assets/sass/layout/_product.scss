@@ -964,3 +964,108 @@
         font-size: 16px;
     }
 }
+
+// ========================================
+// Up-Sale Bundle Styles
+// ========================================
+.ec-upsell-bundle {
+    margin: 40px 0;
+}
+
+.ec-upsell-attribute-option.disabled {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+// ========================================
+// Cross-Sale Section Styles
+// ========================================
+.ec-cross-sale-section {
+    margin: 40px 0;
+
+    .ec-cross-sale-wrapper {
+        background: #f8fafc;
+        border-color: #e5e5e5;
+        border-radius: 8px;
+    }
+
+    .ec-cross-sale-icon {
+        background: rgba(var(--primary-color-rgb), 0.1);
+        border-radius: 50%;
+
+        svg {
+            color: var(--tp-text-primary);
+        }
+    }
+
+    .ec-cross-sale-price-current {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--tp-text-primary);
+    }
+
+    .ec-cross-sale-add-btn {
+        background-color: var(--tp-text-primary);
+        border: 1px solid var(--tp-text-primary);
+        border-radius: 4px;
+        color: var(--tp-common-white);
+        font-size: 13px;
+        font-weight: 500;
+        padding: 10px 16px;
+        transition: all 0.2s ease;
+        margin-top: auto;
+
+        &:hover {
+            filter: brightness(0.9);
+        }
+
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+
+    .ec-cross-sale-card-inner {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ec-cross-sale-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ec-cross-sale-slide .ec-cross-sale-card {
+        height: 100%;
+    }
+}
+
+// ========================================
+// Cart Bundle Badge Styles
+// ========================================
+.cart-bundle-badge {
+    margin-top: 8px;
+
+    .badge {
+        background: var(--tp-text-primary) !important;
+        font-size: 11px;
+        padding: 3px 6px;
+    }
+}
+
+.tpcart__content .cart-bundle-badge {
+    margin-top: 5px;
+    max-width: 180px;
+
+    .badge {
+        font-size: 10px;
+        padding: 2px 5px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: block;
+    }
+}

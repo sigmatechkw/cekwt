@@ -9,6 +9,8 @@ use Botble\Ecommerce\Enums\GlobalOptionEnum;
 use Botble\Ecommerce\Enums\ProductTypeEnum;
 use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Models\Product;
+use Botble\Ecommerce\Models\ProductCategory;
+use Botble\Ecommerce\Models\ProductCollection;
 use Botble\Ecommerce\Models\SpecificationTable;
 use Botble\Media\Facades\RvMedia;
 use Botble\Support\Http\Requests\Request;
@@ -45,6 +47,17 @@ class ProductRequest extends Request
 
     public function rules(): array
     {
+        $productId = $this->route('product.id');
+
+        if (! $productId) {
+            $routeProduct = $this->route('product');
+            $productId = $routeProduct instanceof Product ? $routeProduct->getKey() : $routeProduct;
+        }
+
+        if (! $productId) {
+            $productId = $this->route('id');
+        }
+
         $rules = [
             'name' => ['required', 'string', 'max:250'],
             'description' => ['nullable', 'string', 'max:300000'],
@@ -59,7 +72,23 @@ class ProductRequest extends Request
             ],
             'sale_price' => ['numeric', 'nullable', 'min:0'],
             'start_date' => ['date', 'nullable', 'required_if:sale_type,1'],
-            'end_date' => 'date|nullable|after:' . ($this->input('start_date') ?? Carbon::now()->toDateTimeString()),
+            'end_date' => [
+                'date',
+                'nullable',
+                function ($attribute, $value, $fail): void {
+                    if (! $value || ! $this->input('start_date')) {
+                        return;
+                    }
+
+                    $timezone = config('app.timezone');
+                    $startDate = Carbon::parse($this->input('start_date'), $timezone);
+                    $endDate = Carbon::parse($value, $timezone);
+
+                    if ($endDate->lte($startDate)) {
+                        $fail(trans('plugins/ecommerce::products.product_create_validate_end_date_after'));
+                    }
+                },
+            ],
             'wide' => ['numeric', 'nullable', 'min:0', 'max:100000000'],
             'height' => ['numeric', 'nullable', 'min:0', 'max:100000000'],
             'weight' => ['numeric', 'nullable', 'min:0', 'max:100000000'],
@@ -85,7 +114,7 @@ class ProductRequest extends Request
                 'string',
                 'max:150',
                 Rule::unique((new Product())->getTable())
-                    ->ignore($this->route('product.id')),
+                    ->ignore($productId),
             ],
             'sku' => [
                 'nullable',
@@ -93,13 +122,14 @@ class ProductRequest extends Request
                 'max:150',
             ],
             'cost_per_item' => ['nullable', 'numeric', 'min:0'],
+            'price_includes_tax' => ['nullable', 'boolean'],
             'general_license_code' => ['nullable', 'in:0,1'],
             'categories' => ['nullable', 'array'],
-            'categories.*' => ['nullable', 'exists:ec_product_categories,id'],
+            'categories.*' => ['nullable', Rule::exists((new ProductCategory())->getTable(), 'id')],
             'product_collections' => ['nullable', 'array'],
-            'product_collections.*' => ['nullable', 'exists:ec_product_collections,id'],
+            'product_collections.*' => ['nullable', Rule::exists((new ProductCollection())->getTable(), 'id')],
             'cross_sale_products' => ['nullable', 'array'],
-            'cross_sale_products.*.id' => ['nullable', 'string', 'exists:ec_products,id'],
+            'cross_sale_products.*.id' => ['nullable', 'string', Rule::exists((new Product())->getTable(), 'id')],
             'cross_sale_products.*.price' => ['nullable', 'numeric', 'min:0', 'max:100000000000'],
             'cross_sale_products.*.price_type' => ['nullable', 'string', Rule::in(CrossSellPriceType::values())],
             'minimum_order_quantity' => ['nullable', 'numeric', 'min:0'],
@@ -108,6 +138,7 @@ class ProductRequest extends Request
             'specification_attributes' => ['nullable', 'array'],
             'specification_attributes.*.hidden' => ['nullable', 'boolean'],
             'specification_attributes.*.order' => ['required', 'numeric', 'min:0'],
+            'is_new_until' => ['nullable', 'date'],
         ];
 
         if (EcommerceHelper::isEnabledProductOptions()) {

@@ -12,4 +12,6 @@
     @endforeach
 </div>
 
-@include(Theme::getThemeNamespace('views.ecommerce.includes.quick-view-modal'))
+@if (theme_option('enable_quick_view', 'yes') === 'yes')
+    @include(Theme::getThemeNamespace('views.ecommerce.includes.quick-view-modal'))
+@endif

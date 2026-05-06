@@ -9,7 +9,7 @@ use Botble\SalePopup\Support\SalePopupHelper;
 
 class SalePopupController extends BaseController
 {
-    public function ajaxSalePopup(SalePopupHelper $salePopupHelper): ?string
+    public function ajaxSalePopup(SalePopupHelper $salePopupHelper)
     {
         $limit = (int) $salePopupHelper->getSetting('limit_products', 20);
         $loadProductFrom = $salePopupHelper->getSetting('load_product_from', 'featured_products');
@@ -42,15 +42,23 @@ class SalePopupController extends BaseController
         $urls = [];
         $images = [];
 
+        $defaultImage = RvMedia::getDefaultImage();
+
         foreach ($products as $product) {
             $urls[] = $product->url;
-            $images[] = RvMedia::getImageUrl($product->image, 'thumb', false, RvMedia::getDefaultImage());
+            $images[] = RvMedia::getImageUrl($product->image, 'thumb', false, $defaultImage);
         }
 
         if ($products->isEmpty()) {
-            return null;
+            return $this
+                ->httpResponse();
         }
 
-        return view('plugins/sale-popup::sale-popup', compact('salePopupHelper', 'products', 'images', 'urls'))->render();
+        return $this
+            ->httpResponse()
+            ->setData(
+                view('plugins/sale-popup::sale-popup', compact('salePopupHelper', 'products', 'images', 'urls'))
+                    ->render()
+            );
     }
 }

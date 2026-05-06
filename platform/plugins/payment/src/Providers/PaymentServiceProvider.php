@@ -10,6 +10,7 @@ use Botble\Payment\Models\Payment;
 use Botble\Payment\Repositories\Eloquent\PaymentRepository;
 use Botble\Payment\Repositories\Interfaces\PaymentInterface;
 use Botble\Payment\Supports\PaymentHelper;
+use Botble\Payment\Supports\PaymentMethods as PaymentMethodsSupport;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +27,10 @@ class PaymentServiceProvider extends ServiceProvider
 
         $this->app->singleton(PaymentInterface::class, function () {
             return new PaymentRepository(new Payment());
+        });
+
+        $this->app->singleton(PaymentMethodsSupport::class, function () {
+            return new PaymentMethodsSupport();
         });
 
         $loader = AliasLoader::getInstance();
@@ -62,7 +67,7 @@ class PaymentServiceProvider extends ServiceProvider
                     'priority' => 0,
                     'parent_id' => 'cms-plugins-payments',
                     'name' => 'plugins/payment::payment.transactions',
-                    'icon' => null,
+                    'icon' => 'ti ti-list',
                     'url' => fn () => route('payment.index'),
                     'permissions' => ['payment.index'],
                 ])
@@ -71,7 +76,7 @@ class PaymentServiceProvider extends ServiceProvider
                     'priority' => 1,
                     'parent_id' => 'cms-plugins-payments',
                     'name' => 'plugins/payment::payment.payment_log.name',
-                    'icon' => null,
+                    'icon' => 'ti ti-file-text',
                     'url' => fn () => route('payments.logs.index'),
                     'permissions' => ['payments.logs'],
                 ])
@@ -80,15 +85,15 @@ class PaymentServiceProvider extends ServiceProvider
                     'priority' => 1,
                     'parent_id' => 'cms-plugins-payments',
                     'name' => 'plugins/payment::payment.payment_methods',
-                    'icon' => null,
+                    'icon' => 'ti ti-settings',
                     'url' => fn () => route('payments.methods'),
                     'permissions' => ['payments.settings'],
                 ]);
         });
 
         $this->app->booted(function (): void {
-            add_action('payment_after_api_response', function (string $paymentMethod, array $request = [], array $response = []): void {
-                PaymentHelper::log($paymentMethod, $request, $response);
+            add_action('payment_after_api_response', function (string $paymentMethod, array $request = [], ?array $response = []): void {
+                PaymentHelper::log($paymentMethod, $request, (array) $response);
             }, 999, 3);
         });
     }

@@ -81,7 +81,7 @@ class InlineCss extends PageSpeed
 
             if (count($matches[1]) > 1) {
                 $replace = [
-                    '/>/' => 'class="' . implode(' ', $matches[1]) . '">',
+                    '/>/' => ' class="' . implode(' ', $matches[1]) . '">',
                 ];
 
                 $newHTML[] = str_replace(

@@ -1,1 +1,4 @@
-<x-core::tab.item :$id :$label />
+<x-core::tab.item
+    :$id
+    :$label
+/>

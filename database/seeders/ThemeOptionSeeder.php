@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Botble\Base\Supports\BaseSeeder;
 use Botble\Theme\Database\Traits\HasThemeOptionSeeder;
+use Botble\Theme\Supports\ThemeSupport;
 
 class ThemeOptionSeeder extends BaseSeeder
 {
@@ -44,33 +45,7 @@ class ThemeOptionSeeder extends BaseSeeder
             'newsletter_popup_title' => 'Subscribe Now',
             'newsletter_popup_subtitle' => 'Newsletter',
             'newsletter_popup_description' => 'Subscribe to our newsletter and get 10% off your first purchase',
-            'social_links' => [
-                [
-                    ['key' => 'name', 'value' => 'Facebook'],
-                    ['key' => 'icon', 'value' => 'fab fa-facebook'],
-                    ['key' => 'url', 'value' => 'https://www.facebook.com'],
-                ],
-                [
-                    ['key' => 'name', 'value' => 'Twitter'],
-                    ['key' => 'icon', 'value' => 'fab fa-twitter'],
-                    ['key' => 'url', 'value' => 'https://twitter.com'],
-                ],
-                [
-                    ['key' => 'name', 'value' => 'Behance'],
-                    ['key' => 'icon', 'value' => 'fab fa-behance'],
-                    ['key' => 'url', 'value' => 'https://www.behance.net'],
-                ],
-                [
-                    ['key' => 'name', 'value' => 'Youtube'],
-                    ['key' => 'icon', 'value' => 'fab fa-youtube'],
-                    ['key' => 'url', 'value' => 'https://www.youtube.com'],
-                ],
-                [
-                    ['key' => 'name', 'value' => 'LinkedIn'],
-                    ['key' => 'icon', 'value' => 'fab fa-linkedin'],
-                    ['key' => 'url', 'value' => 'https://www.linkedin.com'],
-                ],
-            ],
+            'social_links' => ThemeSupport::getDefaultSocialLinksData(),
         ]);
     }
 }

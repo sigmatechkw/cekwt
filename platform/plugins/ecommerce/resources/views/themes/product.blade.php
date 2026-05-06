@@ -7,18 +7,18 @@
     <div class="card product-detail-tabs mt-5">
         <ul class="nav nav-pills nav-fill bb-product-content-tabs p-4 pb-0">
             <li class="nav-item">
-                <a class="nav-link active" data-bs-toggle="tab" aria-current="page" href="#tab-description">{{ __('Description') }}</a>
+                <a class="nav-link active" data-bs-toggle="tab" aria-current="page" href="#tab-description">{{ trans('plugins/ecommerce::products.description') }}</a>
             </li>
 
             @if (EcommerceHelper::isProductSpecificationEnabled() && $product->specificationAttributes->where('pivot.hidden', false)->isNotEmpty())
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" aria-current="page" href="#tab-specification">{{ __('Specification') }}</a>
+                    <a class="nav-link" data-bs-toggle="tab" aria-current="page" href="#tab-specification">{{ trans('plugins/ecommerce::products.specification') }}</a>
                 </li>
             @endif
 
             @if (EcommerceHelper::isReviewEnabled())
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#tab-reviews">{{ __('Reviews :number', [
+                    <a class="nav-link" data-bs-toggle="tab" href="#tab-reviews">{{ trans('plugins/ecommerce::review.reviews_with_number', [
                         'number' => $product->reviews_count > 1 ? sprintf('(%s)', $product->reviews_count) : null
                     ]) }}
                     </a>
@@ -63,7 +63,7 @@
 
     @if ($relatedProducts->isNotEmpty())
         <div class="container mt-5">
-            <h2>{{ __('Related products') }}</h2>
+            <h2>{{ trans('plugins/ecommerce::products.related_products') }}</h2>
 
             <div class="row">
                 @include(EcommerceHelper::viewPath('includes.product-items'), ['products' => $relatedProducts])

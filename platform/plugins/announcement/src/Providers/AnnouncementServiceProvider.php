@@ -59,7 +59,7 @@ class AnnouncementServiceProvider extends ServiceProvider
             defined('LANGUAGE_MODULE_SCREEN_NAME')
             && defined('LANGUAGE_ADVANCED_MODULE_SCREEN_NAME')
         ) {
-            LanguageAdvancedManager::registerModule(Announcement::class, ['content']);
+            LanguageAdvancedManager::registerModule(Announcement::class, ['content', 'action_label']);
         }
     }
 }

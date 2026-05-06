@@ -7,6 +7,9 @@ use Botble\Base\Hooks\EmailSettingHooks;
 use Botble\Base\Supports\ServiceProvider;
 use Botble\Setting\Supports\SettingStore;
 use Illuminate\Mail\MailManager;
+use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Bridge\Sendgrid\Transport\SendgridTransportFactory;
+use Symfony\Component\Mailer\Transport\Dsn;
 
 class MailConfigServiceProvider extends ServiceProvider
 {
@@ -26,6 +29,14 @@ class MailConfigServiceProvider extends ServiceProvider
             }
 
             $this->app->resolving(MailManager::class, function () use ($config): void {
+                static $configured = false;
+
+                if ($configured) {
+                    return;
+                }
+
+                $configured = true;
+
                 $setting = $this->app->make(SettingStore::class);
 
                 $defaultMailDriver = function_exists('proc_open') ? 'sendmail' : 'smtp';
@@ -39,29 +50,27 @@ class MailConfigServiceProvider extends ServiceProvider
                             'address' => $setting->get('email_from_address', $config->get('mail.from.address')),
                             'name' => $setting->get('email_from_name', $config->get('mail.from.name')),
                         ],
-                        'stream' => [
-                            'ssl' => [
-                                'allow_self_signed' => true,
-                                'verify_peer' => false,
-                                'verify_peer_name' => false,
-                            ],
-                        ],
                     ]),
                 ]);
 
                 switch ($mailDriver) {
                     case 'smtp':
+                        $encryption = strtolower((string) $setting->get('email_encryption'));
+                        $scheme = match ($encryption) {
+                            'ssl' => 'smtps',
+                            'tls' => 'smtp',
+                            default => null,
+                        };
+
                         $config->set([
                             'mail.mailers.smtp' => array_merge($config->get('mail.mailers.smtp'), [
                                 'transport' => 'smtp',
+                                'scheme' => $scheme,
                                 'host' => $setting->get('email_host', $config->get('mail.mailers.smtp.host')),
                                 'port' => (int) $setting->get('email_port', $config->get('mail.mailers.smtp.port')),
-                                'encryption' => $setting->get(
-                                    'email_encryption',
-                                    $config->get('mail.mailers.smtp.encryption')
-                                ),
                                 'username' => $setting->get('email_username', $config->get('mail.mailers.smtp.username')),
                                 'password' => $setting->get('email_password', $config->get('mail.mailers.smtp.password')),
+                                'local_domain' => $setting->get('email_local_domain') ?: null,
                                 'auth_mode' => null,
                                 'verify_peer' => false,
                             ]),
@@ -115,12 +124,41 @@ class MailConfigServiceProvider extends ServiceProvider
                         ]);
 
                         break;
+                    case 'resend':
+                        $config->set([
+                            'services.resend' => [
+                                'key' => $setting->get('email_resend_key', $config->get('services.resend.key')),
+                            ],
+                        ]);
+
+                        break;
+                    case 'sendgrid':
+                        $config->set([
+                            'mail.mailers.sendgrid' => [
+                                'transport' => 'sendgrid',
+                            ],
+                            'services.sendgrid' => [
+                                'key' => $setting->get('email_sendgrid_key'),
+                            ],
+                        ]);
+
+                        break;
 
                     default:
                         do_action('core_email_setup_mailer', $mailDriver);
 
                         break;
                 }
+            });
+
+            Mail::extend('sendgrid', function (array $config = []) {
+                return (new SendgridTransportFactory())->create(
+                    new Dsn(
+                        'sendgrid+api',
+                        'default',
+                        $config['key'] ?? config('services.sendgrid.key')
+                    )
+                );
             });
         });
     }

@@ -22,7 +22,7 @@ class RenderingSiteMapListener
             $galleries = GalleryModel::query()
                 ->with('slugable')
                 ->wherePublished()
-                ->orderBy('order')
+                ->oldest('order')
                 ->select(['id', 'name', 'updated_at'])->latest()
                 ->get();
 

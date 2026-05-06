@@ -18,4 +18,8 @@ return [
     'limit_display' => 'Limit number display',
     'edit_this_gallery' => 'Edit this gallery',
     'galleries_page' => 'Galleries page',
+    'by_name' => 'By :name',
+    'title' => 'Title',
+    'limit' => 'Limit',
+    'limit_helper' => 'Number of galleries to show. Set to 0 or leave it empty to show all. It will be overridden if you select galleries below.',
 ];

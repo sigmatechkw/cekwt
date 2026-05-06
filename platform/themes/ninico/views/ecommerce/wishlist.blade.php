@@ -12,7 +12,9 @@
                             <thead>
                                 <tr>
                                     <th class="product-thumbnail">{{ __('Product') }}</th>
-                                    <th class="product-price">{{ __('Unit Price') }}</th>
+                                    @if (! EcommerceHelper::hideProductPrice() || EcommerceHelper::isCartEnabled())
+                                        <th class="product-price">{{ __('Unit Price') }}</th>
+                                    @endif
                                     <th class="product-quantity">{{ __('Stock status') }}</th>
                                     <th></th>
                                 </tr>
@@ -23,7 +25,7 @@
                                         <td class="product-thumbnail">
                                             <a
                                                 class="remove-wishlist-item"
-                                                href="{{ route('public.wishlist.remove', $product->id) }}"
+                                                href="#" data-url="{{ route('public.wishlist.remove', $product->id) }}"
                                             >
                                                 <i class="fas fa-times"></i>
                                             </a>
@@ -50,25 +52,30 @@
                                                 @endif
                                             </div>
                                         </td>
-                                        <td class="product-price">
-                                            <span class="amount">{{ format_price($product->price_with_taxes) }}</span>
-                                            @if ($product->front_sale_price === $product->priceprice)
-                                                <small><del>{{ format_price($product->front_sale_price_with_taxes) }}</del></small>
-                                            @endif
-                                        </td>
+                                        @if (! EcommerceHelper::hideProductPrice() || EcommerceHelper::isCartEnabled())
+                                            <td class="product-price">
+                                                @include(EcommerceHelper::viewPath('includes.product-price'), ['product' => $product])
+                                            </td>
+                                        @endif
                                         <td>
-                                            @if ($product->isOutOfStock())
-                                                <span class="text-danger">{{ __('Out Of Stock') }}</span>
-                                            @else
-                                                <span class="text-success">{{ __('In Stock') }}</span>
-                                            @endif
+                                            {!! $product->stock_status_html !!}
                                         </td>
                                         @if (EcommerceHelper::isCartEnabled())
                                             <td>
                                                 <a
                                                     class="tp-btn tp-color-btn add-to-cart"
                                                     data-id="{{ $product->id }}"
-                                                    href="{{ route('public.cart.add-to-cart') }}"
+                                                    href="#" data-url="{{ route('public.cart.add-to-cart') }}"
+                                                    data-product-id="{{ $product->id }}"
+                                                    data-product-name="{{ $product->name }}"
+                                                    data-product-price="{{ $product->price }}"
+                                                    data-product-sku="{{ $product->sku }}"
+                                                    @if($product->brand)
+                                                    data-product-brand="{{ $product->brand->name }}"
+                                                    @endif
+                                                    @if($product->categories->isNotEmpty())
+                                                    data-product-categories="{{ $product->categories->pluck('name')->implode(',') }}"
+                                                    @endif
                                                 >
                                                     {{ __('Add to cart') }}
                                                     <i class="fas fa-shopping-bag"></i>

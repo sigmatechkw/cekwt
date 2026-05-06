@@ -3,6 +3,7 @@
 namespace Botble\Media\Providers;
 
 use Aws\S3\S3Client;
+use Botble\ACL\Models\User;
 use Botble\Base\Facades\DashboardMenu;
 use Botble\Base\Supports\DashboardMenuItem;
 use Botble\Base\Supports\ServiceProvider;
@@ -16,6 +17,7 @@ use Botble\Media\Commands\InsertWatermarkCommand;
 use Botble\Media\Facades\RvMedia;
 use Botble\Media\Models\MediaFile;
 use Botble\Media\Models\MediaFolder;
+use Botble\Media\Models\MediaFolderPermission;
 use Botble\Media\Models\MediaSetting;
 use Botble\Media\Repositories\Eloquent\MediaFileRepository;
 use Botble\Media\Repositories\Eloquent\MediaFolderRepository;
@@ -23,17 +25,23 @@ use Botble\Media\Repositories\Eloquent\MediaSettingRepository;
 use Botble\Media\Repositories\Interfaces\MediaFileInterface;
 use Botble\Media\Repositories\Interfaces\MediaFolderInterface;
 use Botble\Media\Repositories\Interfaces\MediaSettingInterface;
+use Botble\Media\Services\FolderPermissionService;
 use Botble\Media\Storage\BunnyCDN\BunnyCDNAdapter;
 use Botble\Media\Storage\BunnyCDN\BunnyCDNClient;
+use Botble\Media\Supports\ImageDimensionsInjector;
 use Botble\Setting\Supports\SettingStore;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Filesystem\AwsS3V3Adapter as IlluminateAwsS3V3Adapter;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Foundation\AliasLoader;
+use Illuminate\Foundation\Http\Events\RequestHandled;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\Filesystem;
+use Symfony\Component\HttpFoundation\Response as HttpFoundationResponse;
 
 /**
  * @since 02/07/2016 09:50 AM
@@ -58,6 +66,8 @@ class MediaServiceProvider extends ServiceProvider
 
         $this->app->singleton(ChunkStorage::class);
 
+        $this->app->singleton(FolderPermissionService::class);
+
         if (! class_exists('RvMedia')) {
             AliasLoader::getInstance()->alias('RvMedia', RvMedia::class);
         }
@@ -68,12 +78,35 @@ class MediaServiceProvider extends ServiceProvider
         $this
             ->setNamespace('core/media')
             ->loadHelpers()
-            ->loadAndPublishConfigurations(['permissions', 'media'])
+            ->loadAndPublishConfigurations(['media'])
+            ->loadAndPublishConfigurations(['permissions'])
             ->loadMigrations()
             ->loadAndPublishTranslations()
             ->loadAndPublishViews()
             ->loadRoutes()
             ->publishAssets();
+
+        $config = $this->app->make('config');
+        $setting = $this->app->make(SettingStore::class);
+
+        $config->set([
+            'core.media.media.chunk.enabled' => (bool) $setting->get(
+                'media_chunk_enabled',
+                $config->get('core.media.media.chunk.enabled')
+            ),
+            'core.media.media.chunk.chunk_size' => (int) $setting->get(
+                'media_chunk_size',
+                $config->get('core.media.media.chunk.chunk_size')
+            ),
+            'core.media.media.chunk.max_file_size' => (int) $setting->get(
+                'media_max_file_size',
+                $config->get('core.media.media.chunk.max_file_size')
+            ),
+        ]);
+
+        if (! $config->get('core.media.media.use_storage_symlink')) {
+            RvMedia::setUploadPathAndURLToPublic();
+        }
 
         $this->app->resolving(FilesystemManager::class, function (): void {
             Storage::extend('wasabi', function ($app, $config) {
@@ -125,18 +158,6 @@ class MediaServiceProvider extends ServiceProvider
             $config->set([
                 'filesystems.default' => $mediaDriver,
                 'filesystems.disks.public.throw' => true,
-                'core.media.media.chunk.enabled' => (bool) $setting->get(
-                    'media_chunk_enabled',
-                    $config->get('core.media.media.chunk.enabled')
-                ),
-                'core.media.media.chunk.chunk_size' => (int) $setting->get(
-                    'media_chunk_size',
-                    $config->get('core.media.media.chunk.chunk_size')
-                ),
-                'core.media.media.chunk.max_file_size' => (int) $setting->get(
-                    'media_max_file_size',
-                    $config->get('core.media.media.chunk.max_file_size')
-                ),
             ]);
 
             switch ($mediaDriver) {
@@ -215,9 +236,11 @@ class MediaServiceProvider extends ServiceProvider
             }
         });
 
-        if (! $this->app['config']->get('core.media.media.use_storage_symlink')) {
-            RvMedia::setUploadPathAndURLToPublic();
-        }
+        User::resolveRelationUsing('folderPermissions', function ($model) {
+            return $model->hasMany(MediaFolderPermission::class, 'user_id');
+        });
+
+        $this->registerImageDimensionsInjector();
 
         DashboardMenu::default()->beforeRetrieving(function (): void {
             DashboardMenu::make()
@@ -248,5 +271,66 @@ class MediaServiceProvider extends ServiceProvider
                 }
             });
         }
+    }
+
+    /**
+     * Inject explicit width/height attributes onto every rendered <img> tag.
+     * Two layers:
+     *  1. Fast path — hook the `core_media_image` filter so images rendered via
+     *     RvMedia::image() get dims inline during view compilation.
+     *  2. Catch-all — post-process the final HTML response to add dims on raw
+     *     <img> tags in blade templates that bypass RvMedia::image().
+     * Both layers share ImageDimensionsInjector (cached forever per file path).
+     */
+    protected function registerImageDimensionsInjector(): void
+    {
+        add_filter('core_media_image', function ($html, $url) {
+            if (! $html instanceof HtmlString) {
+                return $html;
+            }
+
+            $raw = $html->toHtml();
+
+            if (! preg_match('/<img\b([^>]*)>/i', $raw, $match)) {
+                return $html;
+            }
+
+            $injected = ImageDimensionsInjector::inject($match[0], $match[1]);
+
+            return $injected === $match[0] ? $html : new HtmlString($injected);
+        }, 10, 4);
+
+        Event::listen(RequestHandled::class, function (RequestHandled $event): void {
+            $response = $event->response;
+
+            if (! $response instanceof HttpFoundationResponse) {
+                return;
+            }
+
+            $contentType = (string) $response->headers->get('Content-Type');
+            if (! str_contains($contentType, 'text/html')) {
+                return;
+            }
+
+            $request = $event->request;
+            if ($request->is('admin*') || $request->is('_debugbar*') || $request->ajax()) {
+                return;
+            }
+
+            $html = $response->getContent();
+            if (! is_string($html) || ! str_contains($html, '<img')) {
+                return;
+            }
+
+            $html = preg_replace_callback(
+                '/<img\b([^>]*)>/i',
+                fn ($match) => ImageDimensionsInjector::inject($match[0], $match[1]),
+                $html
+            );
+
+            if (is_string($html)) {
+                $response->setContent($html);
+            }
+        });
     }
 }

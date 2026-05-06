@@ -180,7 +180,7 @@ $(() => {
             effect: 'fade',
             autoplay: {
                 delay: 4500,
-                disableOnInteraction: true,
+                disableOnInteraction: false,
             },
             pagination: {
                 el: '.slider-pagination',
@@ -238,7 +238,7 @@ $(() => {
             centereMode: true,
             autoplay: {
                 delay: 3500,
-                disableOnInteraction: true,
+                disableOnInteraction: false,
             },
             breakpoints: {
                 1400: {
@@ -263,7 +263,7 @@ $(() => {
         })
 
         new Swiper('.tp-team-active', {
-            loop: true,
+            loop: false,
             slidesPerView: 4,
             spaceBetween: 25,
             centereMode: true,
@@ -352,7 +352,7 @@ $(() => {
                     slidesPerView: 3,
                 },
                 0: {
-                    slidesPerView: 1,
+                    slidesPerView: 3,
                 },
             },
             navigation: {
@@ -362,7 +362,7 @@ $(() => {
         })
 
         new Swiper('.brand-active', {
-            loop: true,
+            loop: false,
             slidesPerView: 6,
             spaceBetween: 30,
             freeMode: true,
@@ -393,7 +393,7 @@ $(() => {
         })
 
         new Swiper('.platinam-pro-active', {
-            loop: true,
+            loop: false,
             slidesPerView: 4,
             spaceBetween: 30,
             autoplay: {
@@ -429,7 +429,7 @@ $(() => {
 
         new Swiper('.testi-active', {
             // Optional parameters
-            loop: true,
+            loop: false,
             slidesPerView: 3,
             spaceBetween: 30,
             autoplay: {
@@ -463,7 +463,7 @@ $(() => {
         })
 
         new Swiper('.postbox-active', {
-            loop: true,
+            loop: false,
             slidesPerView: 1,
             spaceBetween: 0,
             autoplay: {
@@ -482,7 +482,7 @@ $(() => {
             autoplay: {
                 delay: 1,
             },
-            loop: true,
+            loop: false,
             freeMode: true,
             slidesPerView: 'auto',
             allowTouchMove: false,
@@ -545,6 +545,10 @@ $(() => {
     }
 
     let initCountdown = function() {
+        if (! $.fn.countdown) {
+            return
+        }
+
         $(document).find('[data-countdown]').each(function() {
             const $this = $(this),
                 finalDate = $(this).data('countdown')
@@ -588,7 +592,7 @@ $(() => {
         },
     })
 
-    $('.tpproduct-details__quantity .cart-minus').on('click', function() {
+    $(document).on('click', '.tpproduct-details__quantity .cart-minus', function() {
         const $input = $(this).parent().find('input')
         let count = parseInt($input.val()) - 1
         count = count < 1 ? 1 : count
@@ -596,7 +600,7 @@ $(() => {
         $input.trigger('change')
     })
 
-    $('.tpproduct-details__quantity .cart-plus').on('click', function() {
+    $(document).on('click', '.tpproduct-details__quantity .cart-plus', function() {
         const $input = $(this).parent().find('input')
         $input.val(parseInt($input.val()) + 1)
         $input.trigger('change')

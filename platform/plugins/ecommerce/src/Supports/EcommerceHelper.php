@@ -20,10 +20,13 @@ use Botble\Ecommerce\Models\Brand;
 use Botble\Ecommerce\Models\Customer;
 use Botble\Ecommerce\Models\Product;
 use Botble\Ecommerce\Models\ProductCategory;
+use Botble\Ecommerce\Models\ProductLabel;
 use Botble\Ecommerce\Models\ProductTag;
 use Botble\Ecommerce\Models\ProductVariation;
 use Botble\Ecommerce\Models\Review;
+use Botble\Ecommerce\Models\Tax;
 use Botble\Ecommerce\Repositories\Interfaces\ProductInterface;
+use Botble\Ecommerce\Services\Products\ProductImageService;
 use Botble\Location\Models\City;
 use Botble\Location\Models\Country;
 use Botble\Location\Models\State;
@@ -38,6 +41,7 @@ use Carbon\Carbon;
 use Closure;
 use Exception;
 use Illuminate\Contracts\Database\Query\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\RouteRegistrar;
@@ -85,14 +89,54 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('review_enabled', 1);
     }
 
+    public function isReviewCommentRequired(): bool
+    {
+        return (bool) get_ecommerce_setting('review_comment_required', 1);
+    }
+
     public function isOrderTrackingEnabled(): bool
     {
         return (bool) get_ecommerce_setting('order_tracking_enabled', 1);
     }
 
+    public function getOrderTrackingMethod(): string
+    {
+        return get_ecommerce_setting('order_tracking_method', 'email');
+    }
+
+    public function isOrderTrackingUsingPhone(): bool
+    {
+        return $this->getOrderTrackingMethod() === 'phone';
+    }
+
     public function isOrderAutoConfirmedEnabled(): bool
     {
         return (bool) get_ecommerce_setting('order_auto_confirmed', 0);
+    }
+
+    public function isOrderDeletionEnabled(): bool
+    {
+        return (bool) get_ecommerce_setting('order_deletion_enabled', 1);
+    }
+
+    /**
+     * Get admin emails for ecommerce notifications.
+     * Falls back to global admin emails if ecommerce admin notification email is not set.
+     */
+    public function getAdminNotificationEmails(): array
+    {
+        $email = get_ecommerce_setting('admin_notification_email');
+
+        if ($email) {
+            $email = is_array($email) ? $email : (array) json_decode($email, true);
+            $emails = array_filter($email);
+
+            if (! empty($emails)) {
+                return array_values($emails);
+            }
+        }
+
+        return get_admin_email()->toArray();
     }
 
     public function reviewMaxFileSize(bool $isConvertToKB = false): float
@@ -121,6 +165,11 @@ class EcommerceHelper
         return $number;
     }
 
+    public function isCustomerReviewImageUploadEnabled(): bool
+    {
+        return (bool) get_ecommerce_setting('allow_customer_upload_image_in_review', true);
+    }
+
     public function getReviewsGroupedByProductId(int|string $productId, int $reviewsCount = 0): Collection
     {
         if ($reviewsCount) {
@@ -146,10 +195,16 @@ class EcommerceHelper
                 $starCount = 0;
             }
 
+            $percentage = ((int) ($starCount * 100)) / 100;
+
+            if ($percentage > 100) {
+                $percentage = 100;
+            }
+
             $results[] = [
                 'star' => $i,
                 'count' => $starCount,
-                'percent' => ((int) ($starCount * 100)) / 100,
+                'percent' => $percentage,
             ];
         }
 
@@ -190,6 +245,17 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('ecommerce_tax_enabled', 1);
     }
 
+    public function roundPrice(float $price, $currency = null): float
+    {
+        if (! $currency) {
+            $currency = get_application_currency();
+        }
+
+        $decimals = $currency ? (int) $currency->decimals : 2;
+
+        return round($price, $decimals);
+    }
+
     public function getAvailableCountries(): array
     {
         if (! empty($this->availableCountries)) {
@@ -199,11 +265,11 @@ class EcommerceHelper
         if ($this->loadCountriesStatesCitiesFromPluginLocation()) {
             $selectedCountries = Country::query()
                 ->wherePublished()
-                ->orderBy('order')
+                ->oldest('order')
                 ->oldest('name')
-                ->select('name', 'id')
+                ->select('name', 'code')
                 ->get()
-                ->mapWithKeys(fn (Country $item) => [$item->getKey() => $item->name]) // @phpstan-ignore-line
+                ->mapWithKeys(fn (Country $item) => [$item->code => $item->name]) // @phpstan-ignore-line
                 ->all();
 
             if (! empty($selectedCountries)) {
@@ -240,7 +306,7 @@ class EcommerceHelper
     public function getDefaultCountryId(): int|string|null
     {
         if ($this->loadCountriesStatesCitiesFromPluginLocation()) {
-            $countryId = Country::query()->wherePublished()->where('is_default', 1)->value('id');
+            $countryId = Country::query()->wherePublished()->where('is_default', 1)->value('code');
 
             if ($countryId) {
                 return $countryId;
@@ -264,8 +330,14 @@ class EcommerceHelper
 
         return State::query()
             ->wherePublished()
-            ->when($this->isUsingInMultipleCountries(), fn ($query) => $query->where('country_id', $countryId))
-            ->orderBy('order')
+            ->when($this->isUsingInMultipleCountries(), function ($query) use ($countryId) {
+                return $query->whereHas('country', function ($query) use ($countryId) {
+                    return $query
+                        ->where('id', $countryId)
+                        ->orWhere('code', $countryId);
+                });
+            })
+            ->oldest('order')
             ->oldest('name')
             ->select('name', 'id')
             ->get()
@@ -275,7 +347,7 @@ class EcommerceHelper
 
     public function getAvailableCitiesByState(int|string|null $stateId, int|string|null $countryId = null): array
     {
-        if (! $this->loadCountriesStatesCitiesFromPluginLocation() || ! $stateId) {
+        if (! $this->loadCountriesStatesCitiesFromPluginLocation() || (! $stateId && ! $countryId)) {
             return [];
         }
 
@@ -284,9 +356,17 @@ class EcommerceHelper
             ->when(
                 $stateId,
                 fn ($query) => $query->where('state_id', $stateId),
-                fn ($query) => $query->when($countryId, fn ($query) => $query->where('country_id', $countryId))
+                function ($query) use ($countryId): void {
+                    $query->when($countryId, function ($query) use ($countryId) {
+                        return $query->whereHas('state.country', function ($query) use ($countryId) {
+                            return $query
+                                ->where('id', $countryId)
+                                ->orWhere('code', $countryId);
+                        });
+                    });
+                }
             )
-            ->orderBy('order')
+            ->oldest('order')
             ->oldest('name')
             ->select('name', 'id')
             ->get()
@@ -300,8 +380,16 @@ class EcommerceHelper
             'default_sorting' => __('Default'),
             'date_asc' => __('Oldest'),
             'date_desc' => __('Newest'),
-            'price_asc' => __('Price: low to high'),
-            'price_desc' => __('Price: high to low'),
+        ];
+
+        if (! EcommerceHelper::hideProductPrice() || EcommerceHelper::isCartEnabled()) {
+            $sort += [
+                'price_asc' => __('Price: low to high'),
+                'price_desc' => __('Price: high to low'),
+            ];
+        }
+
+        $sort += [
             'name_asc' => __('Name: A-Z'),
             'name_desc' => __('Name: Z-A'),
         ];
@@ -352,6 +440,16 @@ class EcommerceHelper
     public function showOutOfStockProducts(): bool
     {
         return (bool) get_ecommerce_setting('show_out_of_stock_products', 1);
+    }
+
+    public function hideProductPrice(): bool
+    {
+        return (bool) get_ecommerce_setting('hide_product_price', 0);
+    }
+
+    public function hideProductPriceWhenZero(): bool
+    {
+        return (bool) get_ecommerce_setting('hide_product_price_when_zero', 0);
     }
 
     public function getDateRangeInReport(Request $request): array
@@ -406,6 +504,11 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('verify_customer_email', 0);
     }
 
+    public function isCustomerRegistrationEnabled(): bool
+    {
+        return (bool) get_ecommerce_setting('enable_customer_registration', true);
+    }
+
     public function disableOrderInvoiceUntilOrderConfirmed(): bool
     {
         return (bool) get_ecommerce_setting('disable_order_invoice_until_order_confirmed', 0);
@@ -421,9 +524,19 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('is_enabled_cross_sale_products', 1);
     }
 
+    public function isEnabledUpSaleProducts(): bool
+    {
+        return (bool) get_ecommerce_setting('is_enabled_up_sale_products', 1);
+    }
+
     public function isEnabledRelatedProducts(): bool
     {
         return (bool) get_ecommerce_setting('is_enabled_related_products', 1);
+    }
+
+    public function isEnabledProductCurrencySelection(): bool
+    {
+        return (bool) get_ecommerce_setting('enable_product_currency_selection', 0);
     }
 
     public function getPhoneValidationRule(): string
@@ -437,7 +550,7 @@ class EcommerceHelper
         return 'required|' . $rule;
     }
 
-    public function getProductReviews(Product $product, int $star = 0, int $perPage = 10): LengthAwarePaginator
+    public function getProductReviews(Product $product, int $star = 0, int $perPage = 10, string $search = '', string $sortBy = 'newest'): LengthAwarePaginator
     {
         $product->loadMissing('variations');
 
@@ -459,6 +572,8 @@ class EcommerceHelper
             $reviews->where('ec_reviews.product_id', $product->getKey());
         }
 
+        $currentCustomerId = auth('customer')->id();
+
         return $reviews
             ->with([
                 'user',
@@ -474,10 +589,27 @@ class EcommerceHelper
             ->when($star && $star >= 1 && $star <= 5, function ($query) use ($star): void {
                 $query->where('ec_reviews.star', $star);
             })
-            ->orderByDesc('created_at')
+            ->when($search, function ($query) use ($search): void {
+                $query->where('ec_reviews.comment', 'LIKE', '%' . $search . '%');
+            })
+            ->when($currentCustomerId, function ($query) use ($currentCustomerId): void {
+                $query->orderByRaw('CASE WHEN customer_id = ? THEN 0 ELSE 1 END', [$currentCustomerId]);
+            })
+            ->when($sortBy === 'oldest', function ($query): void {
+                $query->orderBy('created_at');
+            })
+            ->when($sortBy === 'highest_rating', function ($query): void {
+                $query->orderByDesc('star')->orderByDesc('created_at');
+            })
+            ->when($sortBy === 'lowest_rating', function ($query): void {
+                $query->orderBy('star')->orderByDesc('created_at');
+            })
+            ->when($sortBy === 'newest' || ! in_array($sortBy, ['oldest', 'highest_rating', 'lowest_rating']), function ($query): void {
+                $query->orderByDesc('created_at');
+            })
             ->paginate($perPage)
             ->onEachSide(1)
-            ->appends(['star' => $star]);
+            ->appends(['star' => $star, 'search' => $search, 'sort_by' => $sortBy]);
     }
 
     public function getThousandSeparatorForInputMask(): string
@@ -495,31 +627,17 @@ class EcommerceHelper
      */
     public function withReviewsCount(): array
     {
-        $withCount = [];
-        if ($this->isReviewEnabled()) {
-            $withCount = [
-                'reviews',
-                'reviews as reviews_avg' => function ($query): void {
-                    $query->select(DB::raw('avg(star)'));
-                },
-            ];
-        }
-
-        return $withCount;
+        return [];
     }
 
+    /**
+     * @deprecated since 09/2025
+     */
     public function withReviewsParams(): array
     {
-        if (! $this->isReviewEnabled()) {
-            return [
-                'withCount' => [],
-                'withAvg' => [null, null],
-            ];
-        }
-
         return [
-            'withCount' => ['reviews'],
-            'withAvg' => ['reviews as reviews_avg', 'star'],
+            'withCount' => [],
+            'withAvg' => [null, null],
         ];
     }
 
@@ -529,11 +647,19 @@ class EcommerceHelper
             return $this->loadLocationDataFromPluginLocation;
         }
 
-        if (
-            ! is_plugin_active('location')
-            || ! Country::query()->exists()
-            || ! State::query()->exists()
-        ) {
+        if (! is_plugin_active('location')) {
+            $this->loadLocationDataFromPluginLocation = false;
+
+            return false;
+        }
+
+        try {
+            if (! Country::query()->exists() || ! State::query()->exists()) {
+                $this->loadLocationDataFromPluginLocation = false;
+
+                return false;
+            }
+        } catch (QueryException) {
             $this->loadLocationDataFromPluginLocation = false;
 
             return false;
@@ -553,6 +679,7 @@ class EcommerceHelper
         if ($this->loadCountriesStatesCitiesFromPluginLocation()) {
             $countryName = Country::query()
                 ->where('id', $countryId)
+                ->orWhere('code', $countryId)
                 ->value('name');
 
             if (! empty($countryName)) {
@@ -574,8 +701,8 @@ class EcommerceHelper
                 return $query->where('code', $countryCode);
             })
             ->wherePublished()
-            ->orderBy('order')
-            ->orderBy('name')
+            ->oldest('order')
+            ->oldest('name')
             ->select('name', 'id')
             ->get()
             ->mapWithKeys(fn (State $item) => [$item->getKey() => $item->name]) // @phpstan-ignore-line
@@ -591,7 +718,7 @@ class EcommerceHelper
         return City::query()
             ->where('state_id', $stateId)
             ->wherePublished()
-            ->orderBy('order')
+            ->oldest('order')
             ->oldest('name')
             ->select('name', 'id')
             ->get()
@@ -650,6 +777,9 @@ class EcommerceHelper
         $availableMandatoryFields = $this->getEnabledMandatoryFieldsAtCheckout();
         $mandatoryFields = array_keys($this->getMandatoryFieldsAtCheckout());
         $nullableFields = array_diff($mandatoryFields, $availableMandatoryFields);
+
+        $hiddenFields = $this->getHiddenFieldsAtCheckout();
+        $nullableFields = array_unique(array_merge($nullableFields, $hiddenFields));
 
         if ($nullableFields) {
             foreach ($nullableFields as $key) {
@@ -774,7 +904,26 @@ class EcommerceHelper
                     $productImages = $product->images;
                 }
             } else {
-                $selectedAttrs = $product->defaultVariation->productAttributes;
+                $defaultVariation = $product->defaultVariation;
+                $selectedAttrs = $defaultVariation->relationLoaded('productAttributes')
+                    ? $defaultVariation->productAttributes
+                    : $defaultVariation->productAttributes()->get();
+
+                if ($defaultVariation->product && $defaultVariation->product->isOutOfStock()) {
+                    $product->loadMissing(['variations.product']);
+
+                    $availableVariation = $product->variations
+                        ->filter(function ($variation) {
+                            return $variation->product && ! $variation->product->isOutOfStock();
+                        })
+                        ->first();
+
+                    if ($availableVariation) {
+                        $selectedAttrs = $availableVariation->relationLoaded('productAttributes')
+                            ? $availableVariation->productAttributes
+                            : $availableVariation->productAttributes()->get();
+                    }
+                }
             }
 
             if ($params) {
@@ -828,12 +977,15 @@ class EcommerceHelper
                         'ec_products.barcode',
                         'ec_products.description',
                         'ec_products.is_variation',
+                        'ec_products.price_includes_tax',
+                        'original_products.images as original_images',
                     ],
                     'take' => 1,
                 ]);
 
                 if ($productVariation && ! empty($params)) {
-                    $productImages = $productVariation->images ?: $productImages;
+                    $imageData = app(ProductImageService::class)->getProductImagesWithSizes($productVariation);
+                    $productImages = $imageData['images'];
                 }
             }
         }
@@ -886,6 +1038,33 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('can_custom_return_product_quantity', 0);
     }
 
+    public function isReturnImageUploadEnabled(): bool
+    {
+        return (bool) get_ecommerce_setting('allow_customer_upload_image_in_return', false);
+    }
+
+    public function returnMaxFileSize(bool $isConvertToKB = false): float
+    {
+        $size = (float) get_ecommerce_setting('return_max_file_size', 2);
+
+        if (! $size) {
+            $size = 2;
+        }
+
+        return $isConvertToKB ? $size * 1024 : $size;
+    }
+
+    public function returnMaxFileNumber(): int
+    {
+        $number = (int) get_ecommerce_setting('return_max_file_number', 3);
+
+        if (! $number) {
+            $number = 1;
+        }
+
+        return $number;
+    }
+
     public function isAvailableShipping(Collection $products): bool
     {
         if (! $this->isEnabledSupportDigitalProducts()) {
@@ -929,29 +1108,96 @@ class EcommerceHelper
 
     public function isSaveOrderShippingAddress(Collection $products): bool
     {
-        return $this->isAvailableShipping($products) ||
-            (! auth('customer')->check() && $this->allowGuestCheckoutForDigitalProducts());
+        return $this->isAvailableShipping($products);
+    }
+
+    public function parseFilterParams(Request $request, string $paramName): array
+    {
+        $param = $request->input($paramName);
+
+        if (is_array($param)) {
+            return $param;
+        }
+
+        if (is_string($param) && $param !== '') {
+            return array_filter(explode(',', $param));
+        }
+
+        return [];
     }
 
     public function productFilterParamsValidated(Request $request): bool
     {
+        if (strlen($request->getQueryString() ?? '') > 2048) {
+            return false;
+        }
+
+        $input = $request->input();
+
+        foreach (['tags', 'categories', 'brands'] as $arrayParam) {
+            if (isset($input[$arrayParam]) && is_array($input[$arrayParam])) {
+                $input[$arrayParam] = array_values(array_unique($input[$arrayParam]));
+                $request->merge([$arrayParam => $input[$arrayParam]]);
+            }
+        }
+
+        if (isset($input['price_ranges']) && is_string($input['price_ranges'])) {
+            $parsed = $this->parseJsonParam($input['price_ranges']);
+            if (! empty($parsed)) {
+                $input['price_ranges'] = $parsed;
+            } else {
+                unset($input['price_ranges']);
+            }
+        }
+
+        if (isset($input['attributes']) && is_string($input['attributes'])) {
+            $parsed = $this->parseJsonParam($input['attributes']);
+            if (! empty($parsed)) {
+                $input['attributes'] = $parsed;
+            } else {
+                unset($input['attributes']);
+            }
+        }
+
+        $maxFilterItems = 20;
+
+        $validator = Validator::make($input, [
+            'q' => ['nullable', 'string', 'max:255'],
+            'max_price' => ['nullable', 'numeric'],
+            'min_price' => ['nullable', 'numeric'],
+            'price_ranges' => ['sometimes', 'array', 'max:10'],
+            'price_ranges.*.from' => ['required', 'numeric'],
+            'price_ranges.*.to' => ['required', 'numeric'],
+            'attributes' => ['nullable', 'array', 'sometimes', "max:{$maxFilterItems}"],
+            'categories' => ['nullable', 'array', 'sometimes', "max:{$maxFilterItems}"],
+            'tags' => ['nullable', 'array', 'sometimes', "max:{$maxFilterItems}"],
+            'brands' => ['nullable', 'array', 'sometimes', "max:{$maxFilterItems}"],
+            'sort-by' => ['nullable', 'string', 'max:40'],
+            'page' => ['nullable', 'numeric', 'min:1'],
+            'per_page' => ['nullable', 'numeric', 'min:1'],
+            'discounted_only' => ['nullable', 'boolean'],
+        ]);
+
+        if ($validator->passes()) {
+            return true;
+        }
+
         $validator = Validator::make($request->input(), [
             'q' => ['nullable', 'string', 'max:255'],
             'max_price' => ['nullable', 'numeric'],
             'min_price' => ['nullable', 'numeric'],
-            'price_ranges' => ['sometimes', 'array'],
-            'price_ranges.*.from' => ['required', 'numeric'],
-            'price_ranges.*.to' => ['required', 'numeric'],
-            'attributes' => ['nullable', 'array'],
-            'categories' => ['nullable', 'array'],
-            'tags' => ['nullable', 'array'],
-            'brands' => ['nullable', 'array'],
+            'price_ranges' => ['sometimes', 'string'],
+            'attributes' => ['nullable', 'string', 'sometimes'],
+            'categories' => ['nullable', 'string', 'sometimes'],
+            'tags' => ['nullable', 'string', 'sometimes'],
+            'brands' => ['nullable', 'string', 'sometimes'],
             'sort-by' => ['nullable', 'string', 'max:40'],
             'page' => ['nullable', 'numeric', 'min:1'],
             'per_page' => ['nullable', 'numeric', 'min:1'],
+            'discounted_only' => ['nullable', 'boolean'],
         ]);
 
-        return ! $validator->fails();
+        return $validator->passes();
     }
 
     public function viewPath(string $view): string
@@ -1010,7 +1256,7 @@ class EcommerceHelper
         $keys = ['name', 'company', 'address', 'country', 'state', 'city', 'zip_code', 'email', 'phone'];
 
         if ($this->isUsingInMultipleCountries()) {
-            $country = Arr::get($session, 'country');
+            $country = Arr::get($session, 'country') ?: $this->getDefaultCountryId();
         } else {
             $country = $this->getFirstCountryId();
         }
@@ -1046,9 +1292,32 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('only_allow_customers_purchased_to_review', 0);
     }
 
+    public function hideRatingWhenNoReviews(): bool
+    {
+        return (bool) get_ecommerce_setting('hide_rating_when_no_reviews', false);
+    }
+
     public function isValidToProcessCheckout(): bool
     {
-        return Cart::instance('cart')->rawSubTotal() >= $this->getMinimumOrderAmount();
+        if (Cart::instance('cart')->rawSubTotal() < $this->getMinimumOrderAmount()) {
+            return false;
+        }
+
+        $products = Cart::instance('cart')->products();
+
+        foreach ($products as $product) {
+            $quantityOfProduct = Cart::instance('cart')->rawQuantityByItemId($product->getKey());
+
+            if ($product->minimum_order_quantity > 0 && $quantityOfProduct < $product->minimum_order_quantity) {
+                return false;
+            }
+
+            if ($product->maximum_order_quantity > 0 && $quantityOfProduct > $product->maximum_order_quantity) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function getMandatoryFieldsAtCheckout(): array
@@ -1090,8 +1359,11 @@ class EcommerceHelper
         return apply_filters('ecommerce_product_eager_loading_relations', [
             'slugable',
             'defaultVariation',
+            'defaultVariation.product',
             'productCollections',
             'productLabels',
+            'variations',
+            'variations.product',
         ]);
     }
 
@@ -1100,8 +1372,66 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('display_tax_fields_at_checkout_page', true);
     }
 
+    public function isDisplayCheckoutTaxInformation(): bool
+    {
+        return (bool) get_ecommerce_setting('display_checkout_tax_information', true);
+    }
+
+    public function isDisplayItemTaxAtCheckout(): bool
+    {
+        return (bool) get_ecommerce_setting('display_item_tax_at_checkout', true);
+    }
+
+    public function isTaxOnShippingFeeEnabled(): bool
+    {
+        return $this->isTaxEnabled() && (bool) get_ecommerce_setting('tax_on_shipping_fee', false);
+    }
+
+    public function calculateShippingTax(float $shippingAmount): float
+    {
+        if ($shippingAmount <= 0 || ! $this->isTaxOnShippingFeeEnabled()) {
+            return 0;
+        }
+
+        $percentage = 0;
+
+        $defaultTaxRateId = get_ecommerce_setting('default_tax_rate');
+
+        if ($defaultTaxRateId) {
+            $tax = Tax::query()->find($defaultTaxRateId);
+            if ($tax) {
+                $percentage = (float) $tax->percentage;
+            }
+        }
+
+        if (! $percentage) {
+            foreach (Cart::instance('cart')->content() as $cartItem) {
+                if ($cartItem->taxRate > 0) {
+                    $percentage = (float) $cartItem->taxRate;
+
+                    break;
+                }
+            }
+        }
+
+        if (! $percentage) {
+            return 0;
+        }
+
+        return round($shippingAmount * $percentage / 100, 2);
+    }
+
+    public function isHideCustomerInfoAtCheckout(): bool
+    {
+        return (bool) get_ecommerce_setting('hide_customer_info_at_checkout', false);
+    }
+
     public function getProductMaxPrice(array $categoryIds = []): int
     {
+        if ($maxProductPrice = get_ecommerce_setting('max_product_price_for_filter')) {
+            return (int) $maxProductPrice;
+        }
+
         return Cache::remember(
             'ecommerce_product_price_range' . (! empty($categoryIds) ? '_' . implode('_', $categoryIds) : null),
             Carbon::now()->addHour(),
@@ -1125,6 +1455,11 @@ class EcommerceHelper
         Cache::forget('ecommerce_product_price_range');
     }
 
+    public function isEnabledFilterProductsByCategories(): bool
+    {
+        return (bool) get_ecommerce_setting('enable_filter_products_by_categories', true);
+    }
+
     public function isEnabledFilterProductsByBrands(): bool
     {
         return (bool) get_ecommerce_setting('enable_filter_products_by_brands', true);
@@ -1135,9 +1470,24 @@ class EcommerceHelper
         return (bool) get_ecommerce_setting('enable_filter_products_by_tags', true);
     }
 
+    public function isEnabledFilterProductsByLabels(): bool
+    {
+        return (bool) get_ecommerce_setting('enable_filter_products_by_labels', false);
+    }
+
+    public function getNumberOfPopularTagsForFilter(): int
+    {
+        return (int) get_ecommerce_setting('number_of_popular_tags_for_filter', 10);
+    }
+
     public function isEnabledFilterProductsByAttributes(): bool
     {
         return (bool) get_ecommerce_setting('enable_filter_products_by_attributes', true);
+    }
+
+    public function isEnabledFilterProductsByPrice(): bool
+    {
+        return (bool) get_ecommerce_setting('enable_filter_products_by_price', true);
     }
 
     public function brandsForFilter(array $categoryIds = []): Collection
@@ -1146,33 +1496,38 @@ class EcommerceHelper
             return collect();
         }
 
-        return Brand::query()
-            ->wherePublished()
-            ->with(['categories', 'slugable'])
-            ->when(count($categoryIds), function ($query) use ($categoryIds): void {
-                $query->where(function ($query) use ($categoryIds): void {
-                    $query
-                        ->whereDoesntHave('categories')
-                        ->orWhereHas('categories', function ($query) use ($categoryIds): void {
-                            $query->whereIn('ec_product_categories.id', $categoryIds);
-                        });
-                });
-            })
-            ->withCount([
-                'products' => function ($query) use ($categoryIds): void {
-                    if ($categoryIds) {
-                        $query->whereHas('categories', function ($query) use ($categoryIds): void {
-                            $query->whereIn('ec_product_categories.id', $categoryIds);
-                        });
-                    }
+        sort($categoryIds);
+        $cacheKey = 'brands_for_filter_' . md5(serialize($categoryIds));
 
-                    $query->where('status', BaseStatusEnum::PUBLISHED);
-                },
-            ])
-            ->orderBy('order')
-            ->latest('products_count')->latest()
-            ->get()
-            ->where('products_count', '>', 0);
+        return Cache::remember($cacheKey, 1800, function () use ($categoryIds) {
+            return Brand::query()
+                ->wherePublished()
+                ->with(['categories', 'slugable'])
+                ->when(count($categoryIds), function ($query) use ($categoryIds): void {
+                    $query->where(function ($query) use ($categoryIds): void {
+                        $query
+                            ->whereDoesntHave('categories')
+                            ->orWhereHas('categories', function ($query) use ($categoryIds): void {
+                                $query->whereIn('ec_product_categories.id', $categoryIds);
+                            });
+                    });
+                })
+                ->withCount([
+                    'products' => function ($query) use ($categoryIds): void {
+                        if ($categoryIds) {
+                            $query->whereHas('categories', function ($query) use ($categoryIds): void {
+                                $query->whereIn('ec_product_categories.id', $categoryIds);
+                            });
+                        }
+
+                        $query->where('status', BaseStatusEnum::PUBLISHED);
+                    },
+                ])
+                ->oldest('order')
+                ->latest('products_count')->latest()
+                ->get()
+                ->where('products_count', '>', 0);
+        });
     }
 
     public function tagsForFilter(array $categoryIds = []): Collection
@@ -1181,56 +1536,124 @@ class EcommerceHelper
             return collect();
         }
 
-        return ProductTag::query()
-            ->wherePublished()
-            ->withCount([
-                'products' => function ($query) use ($categoryIds): void {
-                    if ($categoryIds) {
-                        $query->whereHas('categories', function ($query) use ($categoryIds): void {
-                            $query->whereIn('ec_product_categories.id', $categoryIds);
-                        });
-                    }
+        sort($categoryIds);
+        $cacheKey = 'tags_for_filter_' . md5(serialize($categoryIds));
 
-                    $query->where('status', BaseStatusEnum::PUBLISHED);
-                },
-            ])
-            ->with('slugable')
-            ->orderByDesc('products_count')->latest()
-            ->take(10)
-            ->get()
-            ->where('products_count', '>', 0);
+        return Cache::remember($cacheKey, 1800, function () use ($categoryIds) {
+            return ProductTag::query()
+                ->wherePublished()
+                ->withCount([
+                    'products' => function ($query) use ($categoryIds): void {
+                        if ($categoryIds) {
+                            $query->whereHas('categories', function ($query) use ($categoryIds): void {
+                                $query->whereIn('ec_product_categories.id', $categoryIds);
+                            });
+                        }
+
+                        $query->where('status', BaseStatusEnum::PUBLISHED);
+                    },
+                ])
+                ->with('slugable')
+                ->latest('products_count')->latest()
+                ->take($this->getNumberOfPopularTagsForFilter())
+                ->get()
+                ->where('products_count', '>', 0);
+        });
     }
 
-    public function dataForFilter(?ProductCategory $category): array
+    public function labelsForFilter(array $categoryIds = []): Collection
+    {
+        if (! $this->isEnabledFilterProductsByLabels()) {
+            return collect();
+        }
+
+        sort($categoryIds);
+        $cacheKey = 'labels_for_filter_' . md5(serialize($categoryIds));
+
+        return Cache::remember($cacheKey, 1800, function () use ($categoryIds) {
+            return ProductLabel::query()
+                ->wherePublished()
+                ->withCount([
+                    'products' => function ($query) use ($categoryIds): void {
+                        if ($categoryIds) {
+                            $query->whereHas('categories', function ($query) use ($categoryIds): void {
+                                $query->whereIn('ec_product_categories.id', $categoryIds);
+                            });
+                        }
+
+                        $query->where('status', BaseStatusEnum::PUBLISHED);
+                    },
+                ])
+                ->get()
+                ->where('products_count', '>', 0);
+        });
+    }
+
+    public function dataForFilter(?ProductCategory $category, bool $currentCategoryOnly = false): array
     {
         $rand = mt_rand();
-        $categoriesRequest = (array) request()->input('categories', []);
         $urlCurrent = URL::current();
+        $brands = collect();
+        $tags = collect();
+        $labels = collect();
+        $categories = collect();
+
+        $categoriesRequest = (array) request()->input('categories', []);
         $categoryId = $category?->getKey() ?: 0;
-        $categoryIds = array_filter($categoryId ? [$categoryId] : $categoriesRequest);
+        $categoryIds = [];
 
-        $brands = $this->brandsForFilter($categoryIds);
-        $tags = $this->tagsForFilter($categoryIds);
-        $maxFilterPrice = $this->getProductMaxPrice($categoryIds) ?: $this->getProductMaxPrice();
-        $maxFilterPrice = $maxFilterPrice * get_current_exchange_rate();
+        if ($this->isEnabledFilterProductsByCategories()) {
+            $categoryIds = array_filter($categoryId ? [$categoryId] : $categoriesRequest);
 
-        if ($category) {
-            if (! $categoriesRequest && $category->activeChildren->isEmpty() && $category->parent_id) {
-                $category = $category->parent()->with(['activeChildren'])->first();
+            if ($category) {
+                $categoryIds = ProductCategory::getChildrenIds($category->activeChildren, $categoryIds);
+            }
 
+            if ($currentCategoryOnly) {
+                $categories = ProductCategoryHelper::getProductCategoriesWithUrl($categoryIds)->sortBy('parent_id');
+            } else {
                 if ($category) {
-                    $categoriesRequest = array_merge(
-                        [$category->id, $category->parent_id],
-                        $category->activeChildren->pluck('id')->all()
-                    );
+                    if (! $categoriesRequest && $category->activeChildren->isEmpty() && $category->parent_id) {
+                        $category = $category->parent()->with(['activeChildren'])->first();
+
+                        if ($category) {
+                            $categoriesRequest = array_merge(
+                                [$category->id, $category->parent_id],
+                                $category->activeChildren->pluck('id')->all()
+                            );
+                        }
+                    }
+                }
+
+                if ($categoriesRequest && $category) {
+                    $categories = ProductCategoryHelper::getProductCategoriesWithUrl($categoriesRequest)->sortBy('parent_id');
+                } else {
+                    $categories = ProductCategoryHelper::getProductCategoriesWithUrl();
+                }
+
+                if ($categoriesRequest) {
+                    $categoriesRequest = array_filter($categoriesRequest);
                 }
             }
         }
 
-        if ($categoriesRequest && $category) {
-            $categories = ProductCategoryHelper::getProductCategoriesWithUrl($categoriesRequest)->sortBy('parent_id');
-        } else {
-            $categories = ProductCategoryHelper::getProductCategoriesWithUrl();
+        if ($this->isEnabledFilterProductsByBrands()) {
+            $brands = $this->brandsForFilter($categoryIds);
+        }
+
+        if ($this->isEnabledFilterProductsByTags()) {
+            $tags = $this->tagsForFilter($categoryIds);
+        }
+
+        if ($this->isEnabledFilterProductsByLabels()) {
+            $labels = $this->labelsForFilter($categoryIds);
+        }
+
+        $maxFilterPrice = 0;
+
+        if ($this->isEnabledFilterProductsByPrice()) {
+            $maxFilterPrice = $this->getProductMaxPrice($categoryIds) ?: $this->getProductMaxPrice();
+            $maxFilterPrice = $maxFilterPrice * get_current_exchange_rate();
         }
 
         return [
@@ -1242,13 +1665,14 @@ class EcommerceHelper
             $urlCurrent,
             $categoryId,
             $maxFilterPrice,
+            $labels,
         ];
     }
 
     public function dataPriceRangesForFilter(): array
     {
         $priceRanges = request()->query('price_ranges', []);
-        $priceRanges = is_array($priceRanges) ? $priceRanges : [];
+        $priceRanges = $this->parseJsonParam($priceRanges);
 
         if (empty($priceRanges)) {
             return [];
@@ -1266,6 +1690,34 @@ class EcommerceHelper
         }
 
         return array_values($priceRanges);
+    }
+
+    public function parseJsonParam($param): array
+    {
+        if (is_array($param)) {
+            return $param;
+        }
+
+        if (empty($param)) {
+            return [];
+        }
+
+        if (is_string($param)) {
+            $trimmed = trim($param);
+            if (in_array($trimmed, ['[', '{', '[{', ']}', '}]']) ||
+                (str_starts_with($trimmed, '[') && ! str_ends_with($trimmed, ']')) ||
+                (str_starts_with($trimmed, '{') && ! str_ends_with($trimmed, '}'))) {
+                return [];
+            }
+
+            $decoded = json_decode($param, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
     }
 
     public function isPriceRangesChecked(float $fromPrice, float $toPrice): bool
@@ -1344,7 +1796,7 @@ class EcommerceHelper
 
     public function registerThemeAssets(): void
     {
-        $version = get_cms_version() . '.1';
+        $version = $this->getAssetVersion();
 
         Theme::asset()
             ->add('front-ecommerce-css', 'vendor/core/plugins/ecommerce/css/front-ecommerce.css', version: $version);
@@ -1372,8 +1824,8 @@ class EcommerceHelper
             'is_prefix_symbol' => $currency->is_prefix_symbol,
             'symbol' => $currency->symbol,
             'title' => $currency->title,
-            'decimal_separator' => get_ecommerce_setting('decimal_separator', '.'),
-            'thousands_separator' => get_ecommerce_setting('thousands_separator', ','),
+            'decimal_separator' => ($ds = get_ecommerce_setting('decimal_separator', '.')) === 'space' ? ' ' : $ds,
+            'thousands_separator' => ($ts = get_ecommerce_setting('thousands_separator', ',')) === 'space' ? ' ' : $ts,
             'number_after_dot' => $currency->decimals ?: 0,
             'show_symbol_or_title' => true,
         ]);
@@ -1426,43 +1878,46 @@ class EcommerceHelper
         return $this->jsAttributes($action, $product, $additional);
     }
 
-    public function jsAttributes(string $action, Product $product, array $additional = []): string
+    public function jsAttributes(string $action, Product $product, array $additional = [], bool $includeTrackingAttributes = false): string
     {
         $attributes = [
             'data-bb-toggle' => $action,
-            'data-product-id' => $product->getKey(),
-            'data-product-name' => $product->name,
-            'data-product-price' => $product->price,
-            'data-product-sku' => $product->sku,
         ];
 
-        $category = $product->categories->sortByDesc('id')->first();
+        if ($includeTrackingAttributes) {
+            $attributes['data-product-id'] = $product->getKey();
+            $attributes['data-product-name'] = $product->name;
+            $attributes['data-product-price'] = $product->price;
+            $attributes['data-product-sku'] = $product->sku;
 
-        if ($category) {
-            $gpd = '';
+            $category = $product->categories->sortByDesc('id')->first();
 
-            if ($category->parents->count()) {
-                foreach ($category->parents->reverse() as $parentCategory) {
-                    $gpd .= $parentCategory->name . ' > ';
+            if ($category) {
+                $gpd = '';
+
+                if ($category->parents->count()) {
+                    foreach ($category->parents->reverse() as $parentCategory) {
+                        $gpd .= $parentCategory->name . ' > ';
+                    }
                 }
+
+                $gpd .= $category->name;
+
+                $attributes['data-product-category'] = $gpd;
             }
 
-            $gpd .= $category->name;
+            if ($product->brand) {
+                $attributes['data-product-brand'] = $product->brand->name;
+            }
 
-            $attributes['data-product-category'] = $gpd;
-        }
+            /**
+             * @var Collection $categories
+             */
+            $categories = $product->original_product->categories;
 
-        if ($product->brand) {
-            $attributes['data-product-brand'] = $product->brand->name;
-        }
-
-        /**
-         * @var Collection $categories
-         */
-        $categories = $product->original_product->categories;
-
-        if ($categories->isNotEmpty()) {
-            $attributes['data-product-categories'] = $categories->pluck('name')->implode(',');
+            if ($categories->isNotEmpty()) {
+                $attributes['data-product-categories'] = $categories->pluck('name')->implode(',');
+            }
         }
 
         $attributes = [...$attributes, ...$additional];
@@ -1531,6 +1986,24 @@ class EcommerceHelper
         }
 
         return (bool) get_ecommerce_setting('disable_physical_product', false);
+    }
+
+    public function isEnabledLicenseCodesForDigitalProducts(): bool
+    {
+        if (! $this->isEnabledSupportDigitalProducts()) {
+            return false;
+        }
+
+        return (bool) get_ecommerce_setting('enable_license_codes_for_digital_products', true);
+    }
+
+    public function isAutoCompleteDigitalOrdersAfterPayment(): bool
+    {
+        if (! $this->isEnabledSupportDigitalProducts()) {
+            return false;
+        }
+
+        return (bool) get_ecommerce_setting('auto_complete_digital_orders_after_payment', true);
     }
 
     public function getCurrentCreationContextProductType(): ?string
@@ -1659,5 +2132,51 @@ class EcommerceHelper
     public function isProductSpecificationEnabled(): bool
     {
         return (bool) get_ecommerce_setting('enable_product_specification', false);
+    }
+
+    public function isPaymentProofEnabled(): bool
+    {
+        return (bool) get_ecommerce_setting('payment_proof_enabled', 1);
+    }
+
+    public function isGuestPaymentProofEnabled(): bool
+    {
+        return $this->isPaymentProofEnabled() && (bool) get_ecommerce_setting('guest_payment_proof_enabled', true);
+    }
+
+    public function isPaymentProofEnabledForPaymentMethod(?string $paymentMethod): bool
+    {
+        if (! $paymentMethod || ! $this->isPaymentProofEnabled()) {
+            return false;
+        }
+
+        $enabledMethods = get_ecommerce_setting('payment_proof_payment_methods');
+
+        if (! $enabledMethods) {
+            return true;
+        }
+
+        $enabledMethods = json_decode($enabledMethods, true);
+
+        if (empty($enabledMethods)) {
+            return true;
+        }
+
+        return in_array($paymentMethod, $enabledMethods);
+    }
+
+    public function hasAnyProductFilters(): bool
+    {
+        return $this->isEnabledFilterProductsByCategories() ||
+            $this->isEnabledFilterProductsByBrands() ||
+            $this->isEnabledFilterProductsByTags() ||
+            $this->isEnabledFilterProductsByLabels() ||
+            $this->isEnabledFilterProductsByAttributes() ||
+            $this->isEnabledFilterProductsByPrice();
+    }
+
+    public function getAssetVersion(): string
+    {
+        return '3.11.8';
     }
 }

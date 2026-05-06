@@ -35,9 +35,11 @@
             <div class="col-xl-3 col-xxl-3 col-lg-3">
                 <div class="row">
                     @foreach(range(1, 2) as $i)
+                        @continue(! $shortcode->{'ads_' . $i})
+
                         @if($ads = AdsManager::getAds($shortcode->{'ads_' . $i}))
                             <div class="col-lg-12 col-md-6">
-                                <div @class(['tpslider-banner', 'tp-slider-sm-banner mb-30' => $loop->first])>
+                                <div @class(['tpslider-banner', 'tp-slider-sm-banner mt-4 mt-sm-0' => $loop->first])>
                                     <a href="{{ $ads->url }}">
                                         <div class="tpslider-banner__img">
                                             <img src="{{ RvMedia::getImageUrl($ads->image, null, false, RvMedia::getDefaultImage()) }}" alt="{{ $ads->name }}">

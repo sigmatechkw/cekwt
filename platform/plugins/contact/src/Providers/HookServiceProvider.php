@@ -2,6 +2,7 @@
 
 namespace Botble\Contact\Providers;
 
+use Botble\Base\Facades\BaseHelper;
 use Botble\Base\Supports\ServiceProvider;
 use Botble\Contact\Enums\ContactStatusEnum;
 use Botble\Contact\Forms\Fronts\ContactForm;
@@ -12,7 +13,6 @@ use Botble\Contact\Models\CustomField;
 use Botble\Shortcode\Compilers\Shortcode;
 use Botble\Shortcode\Facades\Shortcode as ShortcodeFacade;
 use Botble\Support\Services\Cache\Cache;
-use Botble\Theme\Facades\Theme;
 use Botble\Theme\FormFrontManager;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -21,9 +21,11 @@ class HookServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        add_filter(BASE_FILTER_TOP_HEADER_LAYOUT, [$this, 'registerTopHeaderNotification'], 120);
-        add_filter(BASE_FILTER_APPEND_MENU_NAME, [$this, 'getUnreadCount'], 120, 2);
-        add_filter(BASE_FILTER_MENU_ITEMS_COUNT, [$this, 'getMenuItemCount'], 120);
+        if (BaseHelper::isAdminRequest()) {
+            add_filter(BASE_FILTER_TOP_HEADER_LAYOUT, [$this, 'registerTopHeaderNotification'], 120);
+            add_filter(BASE_FILTER_APPEND_MENU_NAME, [$this, 'getUnreadCount'], 120, 2);
+            add_filter(BASE_FILTER_MENU_ITEMS_COUNT, [$this, 'getMenuItemCount'], 120);
+        }
 
         FormFrontManager::register(ContactForm::class, ContactRequest::class);
 
@@ -38,12 +40,19 @@ class HookServiceProvider extends ServiceProvider
             ShortcodeFacade::setAdminConfig('contact-form', function (array $attributes) {
                 return ShortcodeContactAdminConfigForm::createFromArray($attributes);
             });
+
+            ShortcodeFacade::ignoreLazyLoading(['contact-form']);
+            ShortcodeFacade::ignoreCaches(['contact-form']);
         }
 
         add_filter('form_extra_fields_render', function (?string $fields = null, ?string $form = null): ?string {
+            if ($form && $form !== ContactForm::class) {
+                return $fields;
+            }
+
             $customFields = CustomField::query()
                 ->wherePublished()->with('options')
-                ->orderBy('order')
+                ->oldest('order')
                 ->get();
 
             if ($customFields->isEmpty()) {
@@ -57,18 +66,10 @@ class HookServiceProvider extends ServiceProvider
     public function registerTopHeaderNotification(?string $options): ?string
     {
         if (Auth::guard()->user()->hasPermission('contacts.edit')) {
-            $cache = Cache::make(Contact::class);
-
-            if ($cache->has('unread-contacts')) {
-                $contacts = $cache->get('unread-contacts');
-            } else {
-                $contacts = Contact::query()
-                    ->where('status', ContactStatusEnum::UNREAD)
-                    ->select(['id', 'name', 'email', 'phone', 'created_at'])->latest()
-                    ->paginate(10);
-
-                $cache->put('unread-contacts', $contacts, 60 * 60 * 24);
-            }
+            $contacts = Contact::query()
+                ->where('status', ContactStatusEnum::UNREAD)
+                ->select(['id', 'name', 'email', 'phone', 'created_at'])->latest()
+                ->paginate(10);
 
             if ($contacts->total() == 0) {
                 return $options;
@@ -116,25 +117,6 @@ class HookServiceProvider extends ServiceProvider
     public function form(Shortcode $shortcode): string
     {
         $view = apply_filters(CONTACT_FORM_TEMPLATE_VIEW, 'plugins/contact::forms.contact');
-
-        if (defined('THEME_OPTIONS_MODULE_SCREEN_NAME')) {
-            $this->app->booted(function (): void {
-                Theme::asset()
-                    ->usePath(false)
-                    ->add('contact-css', asset('vendor/core/plugins/contact/css/contact-public.css'), [], [], '1.0.0');
-
-                Theme::asset()
-                    ->container('footer')
-                    ->usePath(false)
-                    ->add(
-                        'contact-public-js',
-                        asset('vendor/core/plugins/contact/js/contact-public.js'),
-                        ['jquery'],
-                        [],
-                        '1.0.0'
-                    );
-            });
-        }
 
         if ($shortcode->view && view()->exists($shortcode->view)) {
             $view = $shortcode->view;

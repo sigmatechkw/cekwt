@@ -28,9 +28,9 @@ class StateForm extends FormAbstract
             ->setValidatorClass(StateRequest::class)
             ->add('name', TextField::class, NameFieldOption::make()->required())
             ->add('slug', TextField::class, [
-                'label' => __('Slug'),
+                'label' => trans('plugins/location::location.slug'),
                 'attr' => [
-                    'placeholder' => __('Slug'),
+                    'placeholder' => trans('plugins/location::location.slug'),
                     'data-counter' => 120,
                 ],
             ])

@@ -51,10 +51,10 @@ class PaymentTable extends TableAbstract
                     return $item->order->address->name;
                 }
 
-                return '&mdash;';
+                return apply_filters('payment_table_payer_name', '&mdash;', $item);
             })
             ->editColumn('payment_channel', function (Payment $item) {
-                return $item->payment_channel->label() ?: '&mdash;';
+                return $item->payment_channel->displayName() ?: '&mdash;';
             })
             ->editColumn('amount', function (Payment $item) {
                 return $item->amount . ' ' . $item->currency;

@@ -30,8 +30,7 @@ class RenderingSiteMapListener
                 case 'blog-tags':
                     $tags = Tag::query()
                         ->with('slugable')
-                        ->wherePublished()
-                        ->orderByDesc('created_at')
+                        ->wherePublished()->latest()
                         ->select(['id', 'name', 'updated_at'])
                         ->get();
 
@@ -42,8 +41,43 @@ class RenderingSiteMapListener
                     break;
             }
 
-            if (preg_match('/^blog-posts-((?:19|20|21|22)\d{2})-(0?[1-9]|1[012])$/', $key, $matches)) {
-                if (($year = Arr::get($matches, 1)) && ($month = Arr::get($matches, 2))) {
+            // Consolidated blog-posts handler with optional page-based pagination.
+            // Matches: blog-posts, blog-posts-page-{N}
+            if ($key === 'blog-posts' || preg_match('/^blog-posts-page-(\d+)$/', $key, $pageMatches)) {
+                $itemsPerPage = SiteMapManager::getItemsPerPage();
+                $page = isset($pageMatches[1]) ? max(1, (int) $pageMatches[1]) : 1;
+                $offset = ($page - 1) * $itemsPerPage;
+
+                $posts = Post::query()
+                    ->wherePublished()
+                    ->latest('updated_at')
+                    ->select(['id', 'name', 'updated_at'])
+                    ->with(['slugable'])
+                    ->skip($offset)
+                    ->take($itemsPerPage)
+                    ->get();
+
+                foreach ($posts as $post) {
+                    if (! $post->slugable) {
+                        continue;
+                    }
+
+                    SiteMapManager::add($post->url, $post->updated_at, '0.8');
+                }
+
+                return;
+            }
+
+            // Backward compatibility: legacy monthly archive URLs (blog-posts-YYYY-MM[-page-N]).
+            // Old indexed URLs continue to resolve so search engines can re-discover from the new index.
+            $paginationData = SiteMapManager::extractPaginationDataByPattern($key, 'blog-posts', 'monthly-archive');
+
+            if ($paginationData) {
+                $matches = $paginationData['matches'];
+                $year = Arr::get($matches, 1);
+                $month = Arr::get($matches, 2);
+
+                if ($year && $month) {
                     $posts = Post::query()
                         ->wherePublished()
                         ->whereYear('created_at', $year)
@@ -51,6 +85,8 @@ class RenderingSiteMapListener
                         ->latest('updated_at')
                         ->select(['id', 'name', 'updated_at'])
                         ->with(['slugable'])
+                        ->skip($paginationData['offset'])
+                        ->take($paginationData['limit'])
                         ->get();
 
                     foreach ($posts as $post) {
@@ -66,19 +102,18 @@ class RenderingSiteMapListener
             return;
         }
 
-        $posts = Post::query()
-            ->selectRaw('YEAR(created_at) as created_year, MONTH(created_at) as created_month, MAX(created_at) as created_at')
-            ->wherePublished()
-            ->groupBy('created_year', 'created_month')
-            ->orderByDesc('created_year')
-            ->orderByDesc('created_month')
-            ->get();
+        // Sitemap index registration.
+        // Match pages.xml behavior: single consolidated blog-posts.xml by default,
+        // auto-paginate (blog-posts-page-N.xml) only when total posts exceed items_per_page threshold.
+        $totalPosts = Post::query()->wherePublished()->count();
 
-        if ($posts->isNotEmpty()) {
-            foreach ($posts as $post) {
-                $key = sprintf('blog-posts-%s-%s', $post->created_year, str_pad($post->created_month, 2, '0', STR_PAD_LEFT));
-                SiteMapManager::addSitemap(SiteMapManager::route($key), $post->created_at);
-            }
+        if ($totalPosts > 0) {
+            $latestUpdated = Post::query()
+                ->wherePublished()
+                ->latest('updated_at')
+                ->value('updated_at');
+
+            SiteMapManager::createPaginatedSitemaps('blog-posts', $totalPosts, $latestUpdated);
         }
 
         $categoryLastUpdated = Category::query()

@@ -14,7 +14,7 @@
                         <div class="blogitem__contetn-date mb-10">
                             <ul>
                                 <li>
-                                    <a class="date-color">{{ $post->created_at->translatedFormat('M d, Y') }}</a>
+                                    <a class="date-color">{{ Theme::formatDate($post->created_at) }}</a>
                                 </li>
                                 @if ($category = $post->firstCategory)
                                     <li>

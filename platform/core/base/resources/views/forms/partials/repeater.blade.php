@@ -5,12 +5,15 @@
 
     $added = [];
 
-    if (! empty($values)) {
+    if (!empty($values)) {
         for ($index = 0; $index < count($values); $index++) {
             $group = '';
 
             foreach ($fields as $key => $field) {
-                $group .= view('core/base::forms.partials.repeater-item', compact('name', 'index', 'key', 'field', 'values'));
+                $group .= view(
+                    'core/base::forms.partials.repeater-item',
+                    compact('name', 'index', 'key', 'field', 'values'),
+                );
             }
 
             $added[] = view('core/base::forms.partials.repeater-group', compact('group'));
@@ -73,14 +76,14 @@
         data-id="{{ $repeaterId }}"
         type="button"
     >
-        {{ __('Add new') }}
+        {{ trans('core/base::forms.add_new') }}
     </x-core::button>
 </div>
 
-@if(request()->ajax())
+@if (request()->ajax())
     @include('core/base::forms.partials.repeater-template', compact('repeaterId', 'defaultFields'))
 @else
     @push('footer')
-       @include('core/base::forms.partials.repeater-template', compact('repeaterId', 'defaultFields'))
+        @include('core/base::forms.partials.repeater-template', compact('repeaterId', 'defaultFields'))
     @endpush
 @endif

@@ -18,13 +18,14 @@ use Botble\LanguageAdvanced\Supports\LanguageAdvancedManager;
 use Botble\Setting\PanelSections\SettingOthersPanelSection;
 use Botble\Shortcode\Facades\Shortcode;
 use Botble\Shortcode\Forms\ShortcodeForm;
+use Illuminate\Contracts\Support\DeferrableProvider;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Throwable;
 
-class AdsServiceProvider extends ServiceProvider
+class AdsServiceProvider extends ServiceProvider implements DeferrableProvider
 {
     use LoadAndPublishDataTrait;
 
@@ -44,7 +45,7 @@ class AdsServiceProvider extends ServiceProvider
             ->loadAndPublishConfigurations(['permissions', 'general'])
             ->loadMigrations()
             ->loadAndPublishTranslations()
-            ->loadRoutes()
+            ->loadRoutes(['web', 'api'])
             ->loadHelpers()
             ->loadAndPublishViews();
 
@@ -62,6 +63,7 @@ class AdsServiceProvider extends ServiceProvider
                     'parent_id' => 'cms-plugins-ads',
                     'priority' => 1,
                     'name' => 'plugins/ads::ads.name',
+                    'icon' => 'ti ti-list',
                     'url' => fn () => route('ads.index'),
                     'permissions' => ['ads.index'],
                 ])
@@ -70,6 +72,7 @@ class AdsServiceProvider extends ServiceProvider
                     'parent_id' => 'cms-plugins-ads',
                     'priority' => 2,
                     'name' => 'plugins/ads::ads.settings.title',
+                    'icon' => 'ti ti-settings',
                     'url' => fn () => route('ads.settings'),
                     'permissions' => ['ads.index'],
                 ]);
@@ -89,7 +92,7 @@ class AdsServiceProvider extends ServiceProvider
 
         $this->app['events']->listen(RouteMatched::class, function (): void {
             if (class_exists(Shortcode::class)) {
-                Shortcode::register('ads', __('Ads'), __('Ads'), function ($shortcode) {
+                Shortcode::register('ads', trans('plugins/ads::ads.name'), trans('plugins/ads::ads.name'), function ($shortcode) {
                     if (! $shortcode->key) {
                         return null;
                     }
@@ -120,6 +123,8 @@ class AdsServiceProvider extends ServiceProvider
             LanguageAdvancedManager::registerModule(Ads::class, [
                 'name',
                 'image',
+                'tablet_image',
+                'mobile_image',
                 'url',
             ]);
         }
@@ -127,32 +132,28 @@ class AdsServiceProvider extends ServiceProvider
         if (defined('THEME_FRONT_HEADER')) {
             add_filter(THEME_FRONT_HEADER, function ($html) {
                 $autoAds = setting('ads_google_adsense_auto_ads');
-
-                if (! $autoAds) {
-                    return $html;
-                }
-
-                return $html . $autoAds;
-            }, 128);
-
-            add_filter(THEME_FRONT_HEADER, function ($html) {
                 $clientId = setting('ads_google_adsense_unit_client_id');
 
-                if (! $clientId) {
-                    return $html;
+                if ($autoAds) {
+                    return $html . $autoAds;
                 }
 
-                return $html . view('plugins/ads::partials.google-adsense.unit-ads-header', compact('clientId'))->render();
+                if ($clientId) {
+                    return $html . view('plugins/ads::partials.google-adsense.unit-ads-header', compact('clientId'))->render();
+                }
+
+                return $html;
             }, 128);
 
-            add_filter(THEME_FRONT_HEADER, function ($html) {
+            add_filter(THEME_FRONT_FOOTER, function ($html) {
                 $clientId = setting('ads_google_adsense_unit_client_id');
+                $autoAds = setting('ads_google_adsense_auto_ads');
 
-                if (! $clientId) {
-                    return $html;
+                if ($clientId && ! $autoAds) {
+                    return $html . view('plugins/ads::partials.google-adsense.unit-ads-footer')->render();
                 }
 
-                return $html . view('plugins/ads::partials.google-adsense.unit-ads-footer')->render();
+                return $html;
             }, 128);
         }
 
@@ -180,5 +181,13 @@ class AdsServiceProvider extends ServiceProvider
                 return true;
             }, 45, 2);
         });
+    }
+
+    public function provides(): array
+    {
+        return [
+            AdsInterface::class,
+            'AdsManager',
+        ];
     }
 }

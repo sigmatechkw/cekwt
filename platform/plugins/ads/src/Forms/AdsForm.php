@@ -74,15 +74,15 @@ class AdsForm extends FormAbstract
             ])
             ->add('image', MediaImageField::class, MediaImageFieldOption::make())
             ->add('tablet_image', MediaImageField::class, [
-                'label' => __('Tablet Image'),
+                'label' => trans('plugins/ads::ads.tablet_image'),
                 'help_block' => [
-                    'text' => __('For devices with width from 768px to 1200px, if empty, will use the image from the desktop.'),
+                    'text' => trans('plugins/ads::ads.tablet_image_helper'),
                 ],
             ])
             ->add('mobile_image', MediaImageField::class, [
-                'label' => __('Mobile Image'),
+                'label' => trans('plugins/ads::ads.mobile_image'),
                 'help_block' => [
-                    'text' => __('For devices with width less than 768px, if empty, will use the image from the tablet.'),
+                    'text' => trans('plugins/ads::ads.mobile_image_helper'),
                 ],
             ])
             ->addCloseCollapsible('ads_type', 'custom_ad')

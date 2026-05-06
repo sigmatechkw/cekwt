@@ -7,23 +7,23 @@
                 </h3>
             </div>
             <div class="tpproduct-details__price mb-10">
-                <span @class(['product-price-sale', 'd-none' => !$product->isOnSale()])>
-                    <span class="amount">{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                    <del class="amount">{{ format_price($product->price_with_taxes) }}</del>
-                </span>
-                <span @class([
-                    'product-price-original',
-                    'd-none' => $product->isOnSale(),
-                    'ms-0' => !$product->isOnSale(),
-                ])>
-                    <span @class(['amount', 'ms-0' => !$product->isOnSale()])>{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                </span>
+                @include(EcommerceHelper::viewPath('includes.product-price'), ['product' => $product])
             </div>
 
             <form
                 class="cart-form"
                 method="POST"
                 action="{{ route('public.cart.add-to-cart') }}"
+                data-product-id="{{ $product->id }}"
+                data-product-name="{{ $product->name }}"
+                data-product-price="{{ $product->price }}"
+                data-product-sku="{{ $product->sku }}"
+                @if($product->brand)
+                data-product-brand="{{ $product->brand->name }}"
+                @endif
+                @if($product->categories->isNotEmpty())
+                data-product-categories="{{ $product->categories->pluck('name')->implode(',') }}"
+                @endif
             >
                 @csrf
                 <input

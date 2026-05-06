@@ -124,7 +124,7 @@ class SettingEcommercePanelSection extends PanelSection
                     ->withIcon('ti ti-robot-face')
                     ->withDescription(trans('plugins/ecommerce::setting.tracking.description'))
                     ->withPriority(170)
-                    ->withRoute('ecommerce.settings.tracking'),
+                    ->withRoute('settings.website-tracking'),
                 PanelSectionItem::make('settings.ecommerce.standard_and_format')
                     ->setTitle(trans('plugins/ecommerce::setting.standard_and_format.name'))
                     ->withIcon('ti ti-checklist')
@@ -137,6 +137,12 @@ class SettingEcommercePanelSection extends PanelSection
                     ->withDescription(trans('plugins/ecommerce::setting.flash_sale.description'))
                     ->withPriority(190)
                     ->withRoute('ecommerce.settings.flash-sale'),
+                PanelSectionItem::make('settings.ecommerce.abandoned_carts')
+                    ->setTitle(trans('plugins/ecommerce::setting.abandoned_cart.name'))
+                    ->withIcon('ti ti-shopping-cart-x')
+                    ->withDescription(trans('plugins/ecommerce::setting.abandoned_cart.panel_description'))
+                    ->withPriority(200)
+                    ->withRoute('ecommerce.settings.abandoned-carts'),
             ]);
     }
 }

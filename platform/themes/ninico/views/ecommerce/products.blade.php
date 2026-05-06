@@ -1,6 +1,6 @@
 {!! dynamic_sidebar('ecommerce_products_sidebar') !!}
 
-<h1 class="d-none">{{ SeoHelper::getTitle() }}</h1>
+<h1 class="d-none">{{ SeoHelper::getTitleOnly() }}</h1>
 
 <div class="product-area pb-20">
     <div class="container">
@@ -15,18 +15,14 @@
                         </button>
                     </div>
                     <div class="product-filter-mobile__content">
-                        <form
-                            id="products-filter"
-                            action="{{ URL::current() }}"
-                            method="get"
-                        >
-                            @include(Theme::getThemeNamespace('views.ecommerce.includes.filters'))
-                        </form>
+                        @include(Theme::getThemeNamespace('views.ecommerce.includes.filters'))
                     </div>
                 </div>
             </div>
             <div class="col-lg-10 col-md-12">
                 <div class="product-sidebar__product-item">
+                    @include(EcommerceHelper::viewPath('includes.product-listing-page-description'))
+
                     <div class="product-filter-content mb-20">
                         <div class="row align-items-center">
                             <div class="col-sm-6">
@@ -85,7 +81,7 @@
                         </div>
                     </div>
                     <div class="row position-relative">
-                        <div class="col-lg-12 product-list">
+                        <div class="col-lg-12 product-list bb-product-items-wrapper">
                             @include(Theme::getThemeNamespace('views.ecommerce.includes.product-items'))
                         </div>
 

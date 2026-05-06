@@ -130,20 +130,20 @@ class WidgetSeeder extends Seeder
                     'title' => 'Site Features',
                     'data' => [
                         1 => [
-                            'icon' => 'icons/product-det-1.png',
-                            'text' => 'Free Shipping apply to all orders over $100',
+                            'icon' => 'icons/verified.png',
+                            'text' => '100% Original Products',
                         ],
                         2 => [
-                            'icon' => 'icons/product-det-2.png',
-                            'text' => 'Guaranteed 100% Organic from natural farms',
+                            'icon' => 'icons/fast-delivery.png',
+                            'text' => 'Fast Delivery within 24-72 Hours',
                         ],
                         3 => [
-                            'icon' => 'icons/product-det-3.png',
-                            'text' => '1 Day Returns if you change your mind',
+                            'icon' => 'icons/cash-on-delivery.png',
+                            'text' => 'Cash On Delivery Available',
                         ],
                         4 => [
-                            'icon' => 'icons/product-det-4.png',
-                            'text' => 'Covid-19 Info: We keep delivering.',
+                            'icon' => 'icons/support.png',
+                            'text' => '24/7 Order Support via whatsapp',
                         ],
                     ],
                 ],

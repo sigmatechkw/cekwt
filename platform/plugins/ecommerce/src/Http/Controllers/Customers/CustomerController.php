@@ -5,6 +5,7 @@ namespace Botble\Ecommerce\Http\Controllers\Customers;
 use Botble\Base\Events\CreatedContentEvent;
 use Botble\Base\Events\UpdatedContentEvent;
 use Botble\Base\Facades\Assets;
+use Botble\Base\Facades\BaseHelper;
 use Botble\Base\Http\Actions\DeleteResourceAction;
 use Botble\Base\Supports\Breadcrumb;
 use Botble\Ecommerce\Facades\EcommerceHelper;
@@ -54,7 +55,11 @@ class CustomerController extends BaseController
         $customer->fill($request->input());
         $customer->confirmed_at = Carbon::now();
         $customer->password = Hash::make($request->input('password'));
-        $customer->dob = Carbon::parse($request->input('dob'));
+
+        if ($dob = $request->input('dob')) {
+            $customer->dob = BaseHelper::parseDate($dob);
+        }
+
         $customer->save();
 
         event(new CreatedContentEvent(CUSTOMER_MODULE_SCREEN_NAME, $request, $customer));
@@ -74,7 +79,7 @@ class CustomerController extends BaseController
 
         $customer->password = null;
 
-        return CustomerForm::createFromModel($customer)->renderForm();
+        return CustomerForm::createFromModel($customer)->setValidatorClass(CustomerEditRequest::class)->renderForm();
     }
 
     public function update(Customer $customer, CustomerEditRequest $request)
@@ -85,7 +90,9 @@ class CustomerController extends BaseController
             $customer->password = Hash::make($request->input('password'));
         }
 
-        $customer->dob = Carbon::parse($request->input('dob'));
+        if ($dob = $request->input('dob')) {
+            $customer->dob = BaseHelper::parseDate($dob);
+        }
 
         $customer->save();
 
@@ -119,6 +126,24 @@ class CustomerController extends BaseController
             ->httpResponse()
             ->setPreviousUrl(route('customers.index'))
             ->withUpdatedSuccessMessage();
+    }
+
+    public function resendVerificationEmail(int|string $id)
+    {
+        $customer = Customer::query()->findOrFail($id);
+
+        if ($customer->confirmed_at) {
+            return $this
+                ->httpResponse()
+                ->setError()
+                ->setMessage(trans('plugins/ecommerce::customer.email_already_verified'));
+        }
+
+        $customer->sendEmailVerificationNotification();
+
+        return $this
+            ->httpResponse()
+            ->setMessage(trans('plugins/ecommerce::customer.verification_email_sent'));
     }
 
     public function getListCustomerForSelect()
@@ -183,7 +208,7 @@ class CustomerController extends BaseController
 
         return $this
             ->httpResponse()
-            ->setData($customer->orders()->count());
+            ->setData($customer->completedOrders()->count());
     }
 
     public function postCreateCustomerWhenCreatingOrder(AddCustomerWhenCreateOrderRequest $request)
@@ -216,5 +241,24 @@ class CustomerController extends BaseController
     public function ajaxReviews(int|string $id, CustomerReviewTable $customerReviewTable)
     {
         return $customerReviewTable->customerId($id)->renderTable();
+    }
+
+    public function view($id)
+    {
+        $customer = Customer::query()->findOrFail($id);
+
+        $this->pageTitle(trans('plugins/ecommerce::customer.view', ['name' => $customer->name]));
+
+        Assets::addScriptsDirectly('vendor/core/plugins/ecommerce/js/customer.js');
+
+        $totalSpent = $customer->completedOrders()->sum('amount');
+        $totalOrders = $customer->finishedOrders()->count();
+        $completedOrders = $customer->completedOrders()->count();
+        $totalProducts = $customer->completedOrders()
+            ->withCount('products')
+            ->get()
+            ->sum('products_count');
+
+        return view('plugins/ecommerce::customers.view', compact('customer', 'totalSpent', 'totalOrders', 'completedOrders', 'totalProducts'));
     }
 }

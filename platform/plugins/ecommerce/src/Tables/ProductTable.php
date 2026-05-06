@@ -12,9 +12,11 @@ use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Models\Brand;
 use Botble\Ecommerce\Models\Product;
 use Botble\Ecommerce\Models\ProductCategory;
+use Botble\Ecommerce\Tables\BulkChanges\StockStatusBulkChange;
 use Botble\Table\Abstracts\TableAbstract;
 use Botble\Table\Actions\DeleteAction;
 use Botble\Table\Actions\EditAction;
+use Botble\Table\Actions\ViewAction;
 use Botble\Table\BulkActions\DeleteBulkAction;
 use Botble\Table\BulkChanges\CreatedAtBulkChange;
 use Botble\Table\BulkChanges\IsFeaturedBulkChange;
@@ -43,6 +45,7 @@ class ProductTable extends TableAbstract
         $this
             ->model(Product::class)
             ->addActions([
+                ViewAction::make()->route('products.view'),
                 EditAction::make()->route('products.edit'),
                 DeleteAction::make()->route('products.destroy'),
             ])
@@ -100,6 +103,7 @@ class ProductTable extends TableAbstract
                         'with_storehouse_management',
                         'stock_status',
                         'product_type',
+                        'currency_code',
                     ])
                     ->where('is_variation', 0);
             });
@@ -163,42 +167,7 @@ class ProductTable extends TableAbstract
                 return BaseHelper::clean($item->stock_status_html);
             })
             ->filter(function ($query) {
-                $keyword = request()->input('search.value');
-                if ($keyword) {
-                    $keyword = '%' . $keyword . '%';
-
-                    $query
-                        ->where(function ($query) use ($keyword): void {
-                            $query
-                                ->where('ec_products.name', 'LIKE', $keyword)
-                                ->where('is_variation', 0);
-                        })
-                        ->orWhere(function ($query) use ($keyword): void {
-                            $query
-                                ->where('is_variation', 0)
-                                ->where(function ($query) use ($keyword): void {
-                                    $query
-                                        ->orWhere('ec_products.sku', 'LIKE', $keyword)
-                                        ->orWhere('ec_products.created_at', 'LIKE', $keyword)
-                                        ->when(
-                                            in_array('sku', EcommerceHelper::getProductsSearchBy()),
-                                            function ($query) use ($keyword): void {
-                                                $query
-                                                    ->orWhereHas(
-                                                        'variations.product',
-                                                        function ($query) use ($keyword): void {
-                                                            $query->where('sku', 'LIKE', $keyword);
-                                                        }
-                                                    );
-                                            }
-                                        );
-                                });
-                        });
-
-                    return $query;
-                }
-
-                return $query;
+                return $query->searchByKeyword(request()->input('search.value'));
             });
 
         return $this->toJson($data);
@@ -337,6 +306,7 @@ class ProductTable extends TableAbstract
                 },
             ],
             StatusBulkChange::make(),
+            StockStatusBulkChange::make(),
             CreatedAtBulkChange::make(),
             IsFeaturedBulkChange::make(),
         ];
@@ -379,7 +349,15 @@ class ProductTable extends TableAbstract
                         ->select($query->getModel()->getTable() . '.*');
                 }
 
-                return $query->where('ec_product_category_product.category_id', $value);
+                $category = ProductCategory::query()->find($value);
+
+                if (! $category) {
+                    break;
+                }
+
+                $categoryIds = ProductCategory::getChildrenIds($category->activeChildren, [$category->getKey()]);
+
+                return $query->whereIn('ec_product_category_product.category_id', $categoryIds);
 
             case 'brand':
                 if (! $value) {

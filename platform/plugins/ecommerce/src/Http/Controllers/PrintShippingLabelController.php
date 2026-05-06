@@ -15,14 +15,17 @@ use Botble\Ecommerce\Models\Shipment;
 use Botble\Location\Models\City;
 use Botble\Location\Models\State;
 use Botble\Media\Facades\RvMedia;
+use Botble\Payment\Enums\PaymentMethodEnum;
 use Botble\Theme\Facades\Theme;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
 class PrintShippingLabelController extends BaseController
 {
-    public function __invoke(Shipment $shipment, Pdf $pdf): Response
+    public function __invoke(Shipment $shipment, Pdf $pdf): ?Response
     {
+        $this->pageTitle(trans('plugins/ecommerce::shipping.shipping_label.print_shipping_label'));
+
         $renderer = new ImageRenderer(
             new RendererStyle(400),
             new SvgImageBackEnd()
@@ -41,7 +44,7 @@ class PrintShippingLabelController extends BaseController
 
             $orderAddress  = $shipment->order->address;
 
-            if (EcommerceHelper::isLoginUsingPhone()) {
+            if (EcommerceHelper::isOrderTrackingUsingPhone()) {
                 $params['phone'] = $orderAddress->phone ?: $customer->phone;
             } else {
                 $params['email'] = $orderAddress->email ?: $customer->email;
@@ -58,11 +61,11 @@ class PrintShippingLabelController extends BaseController
 
         if (EcommerceHelper::loadCountriesStatesCitiesFromPluginLocation()) {
             if (is_numeric($state)) {
-                $state = State::query()->wherePublished()->where('id', $state)->value('name');
+                $state = State::query()->where('id', $state)->value('name');
             }
 
             if (is_numeric($city)) {
-                $city = City::query()->wherePublished()->where('id', $city)->value('name');
+                $city = City::query()->where('id', $city)->value('name');
             }
         }
 
@@ -80,12 +83,27 @@ class PrintShippingLabelController extends BaseController
 
         $order = $shipment->order;
 
+        $isCOD = is_plugin_active('payment')
+            && $order->payment
+            && $order->payment->id
+            && $order->payment->payment_channel == PaymentMethodEnum::COD;
+        $codAmount = $isCOD ? $order->amount : 0;
+
+        $extraCss = apply_filters('ecommerce_shipping_label_extra_css', null, $shipment);
+
+        if ($customCss = setting('shipping_label_template_custom_css')) {
+            $extraCss = $extraCss ? $extraCss . "\n" . $customCss : $customCss;
+        }
+
         return $pdf
             ->templatePath(plugin_path('ecommerce/resources/templates/shipping-label.tpl'))
             ->destinationPath(storage_path('app/templates/ecommerce/shipping-label.tpl'))
             ->paperSizeHalfLetter()
             ->supportLanguage(InvoiceHelper::getLanguageSupport())
             ->data(apply_filters('ecommerce_shipping_label_data', [
+                'settings' => [
+                    'extra_css' => $extraCss,
+                ],
                 'shipment' => [
                     'order_number' => get_order_code($shipment->order_id),
                     'code' => get_shipment_code($shipment->getKey()),
@@ -94,6 +112,9 @@ class PrintShippingLabelController extends BaseController
                     'created_at' => BaseHelper::formatDate($shipment->created_at),
                     'shipping_method' => $order->shipping_method_name,
                     'shipping_fee' => format_price($shipment->price),
+                    'total_collectable_amount' => format_price($codAmount),
+                    'cod_amount' => format_price($codAmount),
+                    'is_cod' => $isCOD,
                     'shipping_company_name' => $shipment->shipping_company_name,
                     'tracking_id' => $shipment->tracking_id,
                     'tracking_link' => $shipment->tracking_link,
@@ -120,14 +141,14 @@ class PrintShippingLabelController extends BaseController
                     'full_address' => $fullAddress,
                 ],
                 'receiver' => [
-                    'name' => $order->user_name,
+                    'name' => $order->shippingAddress->name ?: $order->user->name,
                     'full_address' => $order->full_address,
-                    'email' => $order->user->email,
-                    'phone' => $order->user->phone,
+                    'email' => $order->shippingAddress->email ?: $order->user->email,
+                    'phone' => $order->shippingAddress->phone ?: $order->user->phone,
                     'note' => Str::limit((string) $order->description, 90),
                 ],
             ], $shipment))
-            ->compile()
-            ->stream();
+            ->setProcessingLibrary(get_ecommerce_setting('invoice_processing_library', 'dompdf'))
+            ->stream('shipping-label.pdf');
     }
 }

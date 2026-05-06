@@ -15,5 +15,9 @@
         srcset="{{ RvMedia::getImageUrl($mobileImage, null, false, RvMedia::getDefaultImage()) }}"
         media="(max-width: 767px)"
     />
-    {{ RvMedia::image($slider->image, $slider->title, attributes: ['loading' => 'eager']) }}
+    @if ($slider->getMetaData('action_label', true) || ! $slider->link)
+        {{ RvMedia::image($slider->image, $slider->title, attributes: ['loading' => 'eager']) }}
+    @else
+        <a href="{{ $slider->link }}">{{ RvMedia::image($slider->image, $slider->title, attributes: ['loading' => 'eager']) }}</a>
+    @endif
 </picture>

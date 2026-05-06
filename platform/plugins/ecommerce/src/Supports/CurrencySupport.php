@@ -7,14 +7,21 @@ use Botble\Ecommerce\Models\Currency;
 use Botble\Ecommerce\Services\ExchangeRates\ExchangeRateInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Locale;
 use Throwable;
 
 class CurrencySupport
 {
+    protected const CURRENCY_COOKIE_NAME = 'currency_code';
+
+    protected const CURRENCY_COOKIE_LIFETIME_MINUTES = 60 * 24 * 365;
+
     protected ?Currency $currency = null;
 
     protected ?Currency $defaultCurrency = null;
+
+    protected ?Currency $forcedCurrency = null;
 
     protected Collection|array $currencies = [];
 
@@ -22,15 +29,30 @@ class CurrencySupport
     {
         $this->currency = $currency;
 
-        if (session('currency') == $currency->title) {
-            return;
-        }
+        $this->persistSelectedCurrencyCode($currency->title);
+    }
 
-        session(['currency' => $currency->title]);
+    public function forceCurrentCurrency(Currency $currency): void
+    {
+        $this->forcedCurrency = $currency;
+    }
+
+    public function getForcedCurrency(): ?Currency
+    {
+        return $this->forcedCurrency;
+    }
+
+    public function clearForcedCurrency(): void
+    {
+        $this->forcedCurrency = null;
     }
 
     public function getApplicationCurrency(): ?Currency
     {
+        if ($this->forcedCurrency) {
+            return $this->forcedCurrency;
+        }
+
         $currency = $this->currency;
 
         if (! empty($currency)) {
@@ -41,9 +63,15 @@ class CurrencySupport
             $this->currencies();
         }
 
-        if (session('currency')) {
-            $currency = $this->currencies->where('title', session('currency'))->first();
-        } elseif ((int) get_ecommerce_setting('enable_auto_detect_visitor_currency', 0) == 1) {
+        $selectedCurrencyCode = $this->getSelectedCurrencyCode();
+
+        if ($selectedCurrencyCode) {
+            $currency = $this->currencies->where('title', $selectedCurrencyCode)->first();
+
+            if ($currency && session('currency') !== $selectedCurrencyCode) {
+                session(['currency' => $selectedCurrencyCode]);
+            }
+        } elseif ((int) get_ecommerce_setting('enable_auto_detect_visitor_currency', 0) === 1) {
             $currency = $this->currencies->where('title', $this->detectedCurrencyCode())->first();
         }
 
@@ -101,10 +129,10 @@ class CurrencySupport
             $this->currencies = collect();
         }
 
-        if ($this->currencies->count() == 0) {
-            $this->currencies = Currency::query()
-                ->orderBy('order')
-                ->get();
+        if ($this->currencies->isEmpty()) {
+            $this->currencies = Cache::remember('currencies', 3600, function () {
+                return Currency::query()->oldest('order')->get();
+            });
         }
 
         return $this->currencies;
@@ -134,7 +162,9 @@ class CurrencySupport
             $httpAcceptLanguage = substr($_SERVER['HTTP_ACCEPT_LANGUAGE'], 0, 2);
         }
 
-        return Arr::get($currencies, strtoupper(substr($httpAcceptLanguage, 0, 2)));
+        $detectedCurrencyCode = Arr::get($currencies, strtoupper(substr($httpAcceptLanguage, 0, 2)));
+
+        return apply_filters('cms_currency_detected_currency', $detectedCurrencyCode);
     }
 
     public function countryCurrencies(): array
@@ -598,5 +628,36 @@ class CurrencySupport
         }
 
         return $currency;
+    }
+
+    /**
+     * Resolve the visitor's selected currency code, preferring the session
+     * value and falling back to a long-lived cookie. The cookie keeps the
+     * choice durable across requests when the configured session driver is
+     * unreliable (e.g., file storage on containerized shared hosting where
+     * session files may not persist between requests).
+     */
+    protected function getSelectedCurrencyCode(): ?string
+    {
+        $code = session('currency') ?: request()->cookie(self::CURRENCY_COOKIE_NAME);
+
+        return is_string($code) && $code !== '' ? $code : null;
+    }
+
+    /**
+     * Persist the selected currency code to both the session (per-request
+     * fast path) and a long-lived cookie (durable fallback). The cookie is
+     * always refreshed so its expiration window keeps extending while the
+     * visitor actively uses the site.
+     */
+    protected function persistSelectedCurrencyCode(string $code): void
+    {
+        cookie()->queue(self::CURRENCY_COOKIE_NAME, $code, self::CURRENCY_COOKIE_LIFETIME_MINUTES);
+
+        if (session('currency') === $code) {
+            return;
+        }
+
+        session(['currency' => $code]);
     }
 }

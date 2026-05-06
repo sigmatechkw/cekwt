@@ -51,13 +51,13 @@ if (! function_exists('get_galleries')) {
 }
 
 if (! function_exists('render_galleries')) {
-    function render_galleries(int $limit): string
+    function render_galleries(int $limit, $imageSize = null): string
     {
         $galleries = get_galleries($limit);
 
         $view = apply_filters('galleries_box_template_view', 'plugins/gallery::shortcodes.gallery');
 
-        return view($view, compact('galleries'))->render();
+        return view($view, compact('galleries', 'imageSize'))->render();
     }
 }
 

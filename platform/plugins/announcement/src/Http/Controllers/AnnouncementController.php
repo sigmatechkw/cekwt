@@ -48,7 +48,7 @@ class AnnouncementController extends BaseController
         return $this->httpResponse()
             ->setPreviousUrl(route('announcements.index'))
             ->setNextUrl(route('announcements.edit', $announcement->getKey()))
-            ->setMessage(trans('core/base::notices.create_success_message'));
+            ->withCreatedSuccessMessage();
     }
 
     public function edit(Announcement $announcement, FormBuilder $formBuilder): string
@@ -68,7 +68,7 @@ class AnnouncementController extends BaseController
 
         return $this->httpResponse()
             ->setPreviousUrl(route('announcements.index'))
-            ->setMessage(trans('core/base::notices.update_success_message'));
+            ->withUpdatedSuccessMessage();
     }
 
     public function destroy(Announcement $announcement): DeleteResourceAction

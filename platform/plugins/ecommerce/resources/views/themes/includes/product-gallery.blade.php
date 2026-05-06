@@ -1,17 +1,17 @@
 @php
     EcommerceHelper::registerThemeAssets();
-    $version = get_cms_version();
+    $version = EcommerceHelper::getAssetVersion();
     Theme::asset()->add('lightgallery-css', 'vendor/core/plugins/ecommerce/libraries/lightgallery/css/lightgallery.min.css', version: $version);
     Theme::asset()->add('slick-css', 'vendor/core/plugins/ecommerce/libraries/slick/slick.css', version: $version);
     Theme::asset()->container('footer')->add('lightgallery-js', 'vendor/core/plugins/ecommerce/libraries/lightgallery/js/lightgallery.min.js', ['jquery'], version: $version);
     Theme::asset()->container('footer')->add('slick-js', 'vendor/core/plugins/ecommerce/libraries/slick/slick.min.js', ['jquery'], version: $version);
 
-    $galleryStyle = theme_option('ecommerce_product_gallery_image_style', 'vertical');
-    $videoPosition = theme_option('ecommerce_product_gallery_video_position', 'bottom');
+    $galleryStyle = theme_option('ecommerce_product_gallery_image_style') ?: ($galleryStyle ?? 'vertical');
+    $videoPosition = theme_option('ecommerce_product_gallery_video_position') ?: ($videoPosition ?? 'bottom');
 @endphp
 
 <div class="bb-product-gallery-wrapper">
-    <div @class(['bb-product-gallery', 'bb-product-gallery-' . $galleryStyle])>
+    <div @class(['bb-product-gallery', 'bb-product-gallery-' . $galleryStyle]) data-video-position="{{ $videoPosition }}">
         <div class="bb-product-gallery-images">
             @if ($videoPosition == 'top' || ($videoPosition == 'after_first_image' && empty($productImages)))
                 @include(EcommerceHelper::viewPath('includes.product-gallery-video'))

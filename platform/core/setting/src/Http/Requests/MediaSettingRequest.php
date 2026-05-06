@@ -4,6 +4,7 @@ namespace Botble\Setting\Http\Requests;
 
 use Botble\Base\Rules\OnOffRule;
 use Botble\Media\Facades\RvMedia;
+use Botble\Setting\Rules\AwsRegionRule;
 use Botble\Support\Http\Requests\Request;
 use Illuminate\Validation\Rule;
 
@@ -12,12 +13,13 @@ class MediaSettingRequest extends Request
     public function rules(): array
     {
         $rules = [
-            'media_driver' => ['required', 'string', 'in:public,s3,r2,do_spaces,wasabi,bunnycdn,backblaze'],
+            'media_driver' => ['required', 'string', Rule::in(array_keys(RvMedia::getAvailableDrivers()))],
             'media_aws_access_key_id' => ['nullable', 'string', 'required_if:media_driver,s3'],
             'media_aws_secret_key' => ['nullable', 'string', 'required_if:media_driver,s3'],
-            'media_aws_default_region' => ['nullable', 'string', 'required_if:media_driver,s3'],
+            'media_aws_default_region' => ['nullable', 'string', 'required_if:media_driver,s3', new AwsRegionRule()],
             'media_aws_bucket' => ['nullable', 'string', 'required_if:media_driver,s3'],
             'media_aws_url' => ['nullable', 'string', 'required_if:media_driver,s3'],
+            'media_s3_path' => ['nullable', 'string', 'max:255'],
             'media_aws_endpoint' => ['nullable', 'string'],
             'media_aws_use_path_style_endpoint' => $onOffRule = new OnOffRule(),
 
@@ -30,9 +32,11 @@ class MediaSettingRequest extends Request
 
             'media_wasabi_access_key_id' => ['nullable', 'string', 'required_if:media_driver,wasabi'],
             'media_wasabi_secret_key' => ['nullable', 'string', 'required_if:media_driver,wasabi'],
-            'media_wasabi_default_region' => ['nullable', 'string', 'required_if:media_driver,wasabi'],
+            'media_wasabi_default_region' => ['nullable', 'string', 'required_if:media_driver,wasabi', new AwsRegionRule()],
             'media_wasabi_bucket' => ['nullable', 'string', 'required_if:media_driver,wasabi'],
             'media_wasabi_root' => ['nullable', 'string'],
+            'media_wasabi_cdn_enabled' => $onOffRule,
+            'media_wasabi_cdn_custom_domain' => ['nullable', 'url', 'max:255'],
 
             'media_do_spaces_access_key_id' => ['nullable', 'string', 'required_if:media_driver,do_spaces'],
             'media_do_spaces_secret_key' => ['nullable', 'string', 'required_if:media_driver,do_spaces'],
@@ -40,7 +44,7 @@ class MediaSettingRequest extends Request
             'media_do_spaces_bucket' => ['nullable', 'string', 'required_if:media_driver,do_spaces'],
             'media_do_spaces_endpoint' => ['nullable', 'string', 'required_if:media_driver,do_spaces'],
             'media_do_spaces_cdn_enabled' => $onOffRule,
-            'media_do_spaces_cdn_custom_domain' => ['nullable', 'url', 'required_if:media_driver,do_spaces'],
+            'media_do_spaces_cdn_custom_domain' => ['nullable', 'url', 'max: 255'],
             'media_do_spaces_use_path_style_endpoint' => $onOffRule,
 
             'media_bunnycdn_hostname' => ['nullable', 'string', 'required_if:media_driver,bunnycdn'],
@@ -51,14 +55,17 @@ class MediaSettingRequest extends Request
             'media_backblaze_access_key_id' => ['nullable', 'string', 'required_if:media_driver,backblaze'],
             'media_backblaze_secret_key' => ['nullable', 'string', 'required_if:media_driver,backblaze'],
             'media_backblaze_bucket' => ['nullable', 'string', 'required_if:media_driver,backblaze'],
-            'media_backblaze_default_region' => ['nullable', 'string', 'required_if:media_driver,backblaze'],
+            'media_backblaze_default_region' => ['nullable', 'string', 'required_if:media_driver,backblaze', new AwsRegionRule()],
             'media_backblaze_endpoint' => ['nullable', 'string', 'required_if:media_driver,backblaze'],
             'media_backblaze_url' => ['nullable', 'url'],
             'media_backblaze_use_path_style_endpoint' => $onOffRule,
+            'media_backblaze_cdn_enabled' => $onOffRule,
+            'media_backblaze_cdn_custom_domain' => ['nullable', 'url', 'required_if:media_backblaze_cdn_enabled,1'],
 
             'media_turn_off_automatic_url_translation_into_latin' => $onOffRule,
             'media_use_original_name_for_file_path' => $onOffRule,
             'media_keep_original_file_size_and_quality' => $onOffRule,
+            'media_image_quality' => ['nullable', 'numeric', 'min:70', 'max:100'],
             'media_default_placeholder_image' => ['nullable', 'string'],
             'max_upload_filesize' => ['nullable', 'numeric', 'min:0'],
 

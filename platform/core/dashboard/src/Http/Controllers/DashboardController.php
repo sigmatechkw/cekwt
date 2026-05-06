@@ -33,7 +33,7 @@ class DashboardController extends BaseController
                     $query
                         ->where('user_id', $request->user()->getKey())
                         ->select(['status', 'order', 'settings', 'widget_id'])
-                        ->orderBy('order');
+                        ->oldest('order');
                 },
             ])
             ->select(['id', 'name'])
@@ -55,7 +55,14 @@ class DashboardController extends BaseController
 
         $userWidgets = collect($widgetData)
             ->where('type', 'widget')
-            ->sortBy('priority')
+            ->sortBy(function ($widget) use ($widgets) {
+                $widgetModel = $widgets->firstWhere('id', $widget['id'] ?? null);
+                if ($widgetModel && ($userSettings = $widgetModel->settings->first())) {
+                    return $userSettings->order ?? 999;
+                }
+
+                return 999;
+            })
             ->pluck('view')
             ->all();
 

@@ -27,7 +27,10 @@
 
                 <x-core::card.body>
                     <x-core::tab.content>
-                        <x-core::tab.pane id="tabs-detail" :is-active="true">
+                        <x-core::tab.pane
+                            id="tabs-detail"
+                            :is-active="true"
+                        >
                             @if ($showFields)
                                 {{ $form->getOpenWrapperFormColumns() }}
 

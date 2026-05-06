@@ -2,7 +2,6 @@
 
 namespace Botble\Ecommerce\Commands;
 
-use Botble\Base\Facades\EmailHandler;
 use Botble\Ecommerce\Facades\OrderHelper;
 use Botble\Ecommerce\Models\Order;
 use Illuminate\Console\Command;
@@ -29,15 +28,9 @@ class SendAbandonedCartsEmailCommand extends Command
             }
 
             try {
-                $mailer = EmailHandler::setModule(ECOMMERCE_MODULE_SCREEN_NAME);
                 $order->dont_show_order_info_in_product_list = true;
 
-                /**
-                 * @var Order $order
-                 */
-                OrderHelper::setEmailVariables($order);
-
-                $mailer->sendUsingTemplate('order_recover', $email);
+                OrderHelper::sendOrderEmail($order, 'order_recover', $email);
 
                 $count++;
             } catch (Throwable $exception) {

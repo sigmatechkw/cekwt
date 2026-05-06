@@ -129,8 +129,6 @@ class ProductSeeder extends BaseSeeder
         Payment::query()->truncate();
         ProductFile::query()->truncate();
 
-        $faker = $this->fake();
-
         foreach ($products as $key => $product) {
             $item = [
                 'name' => $product,
@@ -164,19 +162,19 @@ class ProductSeeder extends BaseSeeder
 
                                 <p>This is a unisex item, please check our clothing &amp; footwear sizing guide for specific Rains jacket sizing information. RAINS comes from the rainy nation of Denmark at the edge of the European continent, close to the ocean and with prevailing westerly winds; all factors that contribute to an average of 121 rain days each year. Arising from these rainy weather conditions comes the attitude that a quick rain shower may be beautiful, as well as moody- but first and foremost requires the right outfit. Rains focus on the whole experience of going outside on rainy days, issuing an invitation to explore even in the most mercurial weather.</p>';
             $item['status'] = BaseStatusEnum::PUBLISHED;
-            $item['sku'] = 'NC-' . $faker->numberBetween(100, 200);
-            $item['brand_id'] = $faker->numberBetween(1, 7);
-            $item['views'] = $faker->numberBetween(1000, 200000);
-            $item['quantity'] = $faker->numberBetween(10, 20);
-            $item['length'] = $faker->numberBetween(10, 20);
-            $item['wide'] = $faker->numberBetween(10, 20);
-            $item['height'] = $faker->numberBetween(10, 20);
-            $item['weight'] = $faker->numberBetween(500, 900);
+            $item['sku'] = 'NC-' . rand(100, 200);
+            $item['brand_id'] = rand(1, 7);
+            $item['views'] = rand(1000, 200000);
+            $item['quantity'] = rand(10, 20);
+            $item['length'] = rand(10, 20);
+            $item['wide'] = rand(10, 20);
+            $item['height'] = rand(10, 20);
+            $item['weight'] = rand(500, 900);
             $item['with_storehouse_management'] = true;
 
-            $item['price'] = $faker->numberBetween(200, 500);
-            $item['sale_price'] = $faker->numberBetween(150, 200);
-            $item['is_featured'] = $faker->boolean();
+            $item['price'] = rand(200, 500);
+            $item['sale_price'] = rand(150, 200);
+            $item['is_featured'] = (bool) rand(0, 1);
 
             // Support Digital Product
             $productName = $item['name'];
@@ -186,7 +184,7 @@ class ProductSeeder extends BaseSeeder
 
             $images = [];
 
-            foreach ($faker->randomElements(range(1, 95), rand(5, 12)) as $i) {
+            foreach (Arr::random(range(1, 95), rand(5, 12)) as $i) {
                 $images[] = "products/product-$i.jpg";
             }
 
@@ -194,20 +192,20 @@ class ProductSeeder extends BaseSeeder
 
             $product = Product::query()->create($item);
 
-            $product->productCollections()->sync([$faker->numberBetween(1, 3)]);
+            $product->productCollections()->sync([rand(1, 3)]);
 
             if (is_int($product->id) && $product->id % 7 == 0) {
-                $product->productLabels()->sync([$faker->numberBetween(1, 3)]);
+                $product->productLabels()->sync([rand(1, 3)]);
             }
 
             $product->categories()->sync([
-                $faker->numberBetween(1, 14),
+                rand(1, 14),
             ]);
 
             $product->tags()->sync([
-                $faker->numberBetween(1, 6),
-                $faker->numberBetween(1, 6),
-                $faker->numberBetween(1, 6),
+                rand(1, 6),
+                rand(1, 6),
+                rand(1, 6),
             ]);
 
             $product->taxes()->sync([1]);
@@ -242,7 +240,23 @@ class ProductSeeder extends BaseSeeder
                 $this->random(1, $countProducts, [$product->id]),
             ]);
 
-            for ($j = 0; $j < $faker->numberBetween(1, 5); $j++) {
+            $upSaleProductIds = array_unique([
+                $this->random(1, $countProducts, [$product->id]),
+                $this->random(1, $countProducts, [$product->id]),
+            ]);
+
+            $upSaleSyncData = [];
+            foreach ($upSaleProductIds as $upSaleProductId) {
+                $isPercentDiscount = (bool) rand(0, 1);
+                $upSaleSyncData[$upSaleProductId] = [
+                    'price' => $isPercentDiscount ? rand(5, 20) : rand(5, 50),
+                    'price_type' => $isPercentDiscount ? 'percent' : 'fixed',
+                ];
+            }
+
+            $product->upSales()->sync($upSaleSyncData);
+
+            for ($j = 0; $j < rand(1, 5); $j++) {
                 $variation = Product::query()->create([
                     'name' => $product->name,
                     'status' => BaseStatusEnum::PUBLISHED,
@@ -255,10 +269,7 @@ class ProductSeeder extends BaseSeeder
                     'price' => $product->price,
                     'sale_price' => is_int(
                         $product->id
-                    ) && $product->id % 4 == 0 ? ($product->price - $product->price * $faker->numberBetween(
-                        10,
-                        30
-                    ) / 100) : null,
+                    ) && $product->id % 4 == 0 ? ($product->price - $product->price * rand(10, 30) / 100) : null,
                     'brand_id' => $product->brand_id,
                     'with_storehouse_management' => $product->with_storehouse_management,
                     'is_variation' => true,
@@ -280,12 +291,12 @@ class ProductSeeder extends BaseSeeder
                 }
 
                 ProductVariationItem::query()->create([
-                    'attribute_id' => $faker->numberBetween(1, 5),
+                    'attribute_id' => rand(1, 5),
                     'variation_id' => $productVariation->id,
                 ]);
 
                 ProductVariationItem::query()->create([
-                    'attribute_id' => $faker->numberBetween(6, 10),
+                    'attribute_id' => rand(6, 10),
                     'variation_id' => $productVariation->id,
                 ]);
 

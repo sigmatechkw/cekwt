@@ -6,9 +6,6 @@ use Botble\Base\Facades\PanelSectionManager;
 use Botble\Base\PanelSections\PanelSectionItem;
 use Botble\Base\Traits\LoadAndPublishDataTrait;
 use Botble\Ecommerce\PanelSections\SettingEcommercePanelSection;
-use Botble\Theme\Facades\Theme;
-use Illuminate\Routing\Events\RouteMatched;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class SalePopupServiceProvider extends ServiceProvider
@@ -35,41 +32,6 @@ class SalePopupServiceProvider extends ServiceProvider
                         ->withPriority(190)
                         ->withRoute('sale-popup.settings')
                 );
-        });
-
-        $this->app['events']->listen(RouteMatched::class, function (): void {
-            if (
-                defined('THEME_FRONT_FOOTER') &&
-                setting('sale_popup_enabled', 1) &&
-                in_array(Route::currentRouteName(), json_decode(setting('sale_popup_display_pages', '["public.index"]'), true))
-            ) {
-                Theme::asset()
-                    ->usePath(false)
-                    ->add(
-                        'sale-popup-css',
-                        asset('vendor/core/plugins/sale-popup/css/sale-popup.css'),
-                        [],
-                        [],
-                        '1.0.0'
-                    );
-
-                Theme::asset()
-                    ->container('footer')
-                    ->usePath(false)
-                    ->add(
-                        'sale-popup-js',
-                        asset('vendor/core/plugins/sale-popup/js/sale-popup.js'),
-                        ['jquery'],
-                        [],
-                        '1.0.0'
-                    );
-
-                add_filter(
-                    THEME_FRONT_FOOTER,
-                    fn (?string $html) => $html . view('plugins/sale-popup::front')->render(),
-                    1457
-                );
-            }
         });
 
         $this->app->booted(function (): void {

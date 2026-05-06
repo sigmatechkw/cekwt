@@ -20,10 +20,10 @@
                                         <a href="{{ $product->url }}">{{ $product->name }}</a>
                                     </h4>
                                     <div class="tpselectproduct__price">
-                                        <span>{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                                        @if($product->isOnSale())
-                                            <span class="tpproduct__priceinfo-list-oldprice small">{{ format_price($product->price_with_taxes) }}</span>
-                                        @endif
+                                        @include(EcommerceHelper::viewPath('includes.product-price'), [
+                                            'product' => $product,
+                                            'priceOriginalClassName' => 'tpproduct__priceinfo-list-oldprice small',
+                                        ])
                                     </div>
                                 </div>
                             </div>

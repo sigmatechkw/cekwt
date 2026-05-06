@@ -1,4 +1,10 @@
 @php
+    if (! isset($categories)) {
+        $categories = is_plugin_active('ecommerce')
+            ? \Botble\Ecommerce\Facades\ProductCategoryHelper::getProductCategoriesWithUrl()
+            : collect();
+    }
+
     $groupedCategories = $categories->groupBy('parent_id');
 
     $currentCategories = $groupedCategories->get(0);
@@ -11,7 +17,7 @@
     @endphp
 
     <div class="cat-menu__category p-relative">
-        @if (theme_option('collapsing_product_categories_on_homepage', 'no') == 'yes')
+        @if (theme_option('collapsing_product_categories_on_homepage', 'no') == 'yes' || theme_option('header_style', 'default') == 'collapsed')
             <a class="tp-cat-toggle js-tp-cat-toggle" href="#" title="Expand/Collapse">
                 <i class="fal fa-bars"></i> {{ __('Categories') }}
             </a>
@@ -20,7 +26,7 @@
                 <i class="fal fa-bars"></i> {{ __('Categories') }}
             </span>
         @endif
-        <div class="category-menu category-menu-off" @style(['display: none !important' => theme_option('collapsing_product_categories_on_homepage', 'no') == 'yes'])>
+        <div class="category-menu category-menu-off" @style(['display: none !important' => theme_option('collapsing_product_categories_on_homepage', 'no') == 'yes' || url()->current() != BaseHelper::getHomepageUrl()])>
             <ul class="cat-menu__list">
                 @foreach ($currentCategories as $category)
                     @php
@@ -29,7 +35,7 @@
                     <li @class(['menu-item-has-children' => $hasChildren, 'hidden-to-toggle' => $hasMoreCategories ? $loop->iteration > $limit : $loop->iteration > $limit + 1])>
                         <a href="{{ route('public.single', $category->url) }}">
                             @if ($categoryImage = $category->icon_image)
-                                <img src="{{ RvMedia::getImageUrl($categoryImage) }}" alt="{{ $category->name }}" width="18" height="18" class="me-1">
+                                <img src="{{ RvMedia::getImageUrl($categoryImage) }}" alt="{{ $category->name }}" class="category-icon me-1">
                             @elseif ($categoryIcon = $category->icon)
                                 <i class="{{ $categoryIcon }}"></i>
                             @endif

@@ -26,6 +26,8 @@ trait InteractsWithSettings
 
     protected function performUpdate(array $data, string $prefix = ''): BaseHttpResponse
     {
+        do_action('core_before_update_settings', $data, $prefix);
+
         $this->saveSettings($data, $prefix);
 
         if (! method_exists($this, 'httpResponse')) {
@@ -33,6 +35,8 @@ trait InteractsWithSettings
         }
 
         DashboardMenu::clearCaches();
+
+        do_action('core_after_update_settings', $data, $prefix);
 
         return $this
             ->httpResponse()

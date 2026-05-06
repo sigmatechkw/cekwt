@@ -20,6 +20,7 @@ return [
     'remove_plugin_confirm_yes' => 'Yes, remove it!',
     'total_plugins' => 'Total plugins',
     'invalid_plugin' => 'This plugin is not a valid plugin, please check it again!',
+    'invalid_plugin_with_errors' => 'This plugin is not a valid plugin. Please fix these issues in plugin.json: :errors',
     'version' => 'Version',
     'invalid_json' => 'Invalid plugin.json!',
     'activate_success' => 'Activate plugin successfully!',
@@ -49,4 +50,7 @@ return [
             'updates-available' => 'Updates Available',
         ],
     ],
+    'install_plugin_from_marketplace' => 'Install plugin from Marketplace',
+    'accept_and_install' => 'Accept and install',
+    'cancel' => 'Cancel',
 ];

@@ -2,7 +2,7 @@
 
 return [
     'name' => 'Invoices',
-    'description' => 'View and update your invoices settings',
+    'description' => 'View generated invoices and download PDFs for customer orders',
     'create' => 'New invoice',
     'edit' => 'Edit invoice',
     'print' => 'Print Invoice',
@@ -47,4 +47,5 @@ return [
         'completed' => 'Completed',
         'canceled' => 'Canceled',
     ],
+    'back_to_invoices' => 'Back to Invoices',
 ];

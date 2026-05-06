@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Schema;
 return new class () extends Migration {
     public function up(): void
     {
+        if (Schema::hasColumn('payments', 'customer_type')) {
+            return;
+        }
+
         Schema::table('payments', function (Blueprint $table): void {
             $table->string('customer_type')->nullable();
         });

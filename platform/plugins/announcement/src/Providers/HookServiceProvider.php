@@ -15,7 +15,7 @@ class HookServiceProvider extends ServiceProvider
         }
 
         add_filter(THEME_FRONT_HEADER, function (?string $header): string {
-            return $header . Html::style(asset('vendor/core/plugins/announcement/css/announcement.css'));
+            return $header . Html::style(asset('vendor/core/plugins/announcement/css/announcement.css' . '?v=' . get_cms_version()));
         });
 
         add_filter(AnnouncementHelper::isThemeBuiltIn() ? 'announcement_display_html' : THEME_FRONT_BODY, function (?string $html): string {
@@ -30,7 +30,7 @@ class HookServiceProvider extends ServiceProvider
         }, 99);
 
         add_filter(THEME_FRONT_FOOTER, function (?string $footer): string {
-            return $footer . Html::script(asset('vendor/core/plugins/announcement/js/announcement.js'));
+            return $footer . Html::script(asset('vendor/core/plugins/announcement/js/announcement.js' . '?v=' . get_cms_version()));
         }, 99);
     }
 }

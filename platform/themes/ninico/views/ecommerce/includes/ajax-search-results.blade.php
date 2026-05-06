@@ -2,16 +2,16 @@
     <div class="panel__content">
         <div class="p-3">
             @foreach($products as $product)
-                <div class="product-item row mb-3">
+                <div class="product-item row mb-3" {!! EcommerceHelper::jsAttributes('product-item', $product) !!}>
                     <div class="col-3 col-xl-2">
-                        <a href="{{ $product->url }}">
+                        <a href="{{ $product->url }}" data-bb-toggle="product-link">
                             <img src="{{ RvMedia::getImageUrl($product->image, 'medium', false, RvMedia::getDefaultImage()) }}" alt="{{ $product->name }}" class="w-100 rounded">
                         </a>
                     </div>
                     <div class="col-9 col-xl-10">
                         <div class="text-start px-1">
                             <div>
-                                <a href="{{ $product->url }}" class="product-name">{!! BaseHelper::clean($product->name) !!}</a>
+                                <a href="{{ $product->url }}" class="product-name" data-bb-toggle="product-link">{!! BaseHelper::clean($product->name) !!}</a>
                             </div>
                             @if (EcommerceHelper::isReviewEnabled() && $product->reviews_count)
                                 <div class="product-rating">
@@ -22,10 +22,10 @@
                                 </div>
                             @endif
                             <div class="product-price">
-                                <span>{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                                @if ($product->isOnSale())
-                                    <span class="oldprice">{{ format_price($product->price_with_taxes) }}</span>
-                                @endif
+                                @include(EcommerceHelper::viewPath('includes.product-price'), [
+                                    'product' => $product,
+                                    'priceOriginalClassName' => 'oldprice',
+                                ])
                             </div>
                         </div>
                     </div>

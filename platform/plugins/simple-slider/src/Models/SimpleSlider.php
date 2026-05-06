@@ -34,6 +34,11 @@ class SimpleSlider extends BaseModel
 
     public function sliderItems(): HasMany
     {
-        return $this->hasMany(SimpleSliderItem::class)->orderBy('simple_slider_items.order');
+        return $this->hasMany(SimpleSliderItem::class)->oldest('simple_slider_items.order');
+    }
+
+    public function publishedSliderItems(): HasMany
+    {
+        return $this->sliderItems()->where('simple_slider_items.status', BaseStatusEnum::PUBLISHED);
     }
 }

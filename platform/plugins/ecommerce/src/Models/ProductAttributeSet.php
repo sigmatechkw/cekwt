@@ -29,12 +29,13 @@ class ProductAttributeSet extends BaseModel
 
     protected $casts = [
         'status' => BaseStatusEnum::class,
+        'order' => 'int',
     ];
 
     protected static function booted(): void
     {
         self::saving(function (self $model): void {
-            $model->slug = self::createSlug($model->title, $model->getKey());
+            $model->slug = self::createSlug($model->slug ?: $model->title, $model->getKey());
         });
 
         static::deleted(function (ProductAttributeSet $productAttributeSet): void {
@@ -46,7 +47,7 @@ class ProductAttributeSet extends BaseModel
 
     public function attributes(): HasMany
     {
-        return $this->hasMany(ProductAttribute::class, 'attribute_set_id')->orderBy('order');
+        return $this->hasMany(ProductAttribute::class, 'attribute_set_id')->oldest('order');
     }
 
     public function categories(): MorphToMany
@@ -75,21 +76,16 @@ class ProductAttributeSet extends BaseModel
             ->get();
     }
 
-    public static function getAllWithSelected(int|array|string|null $productId, array $with = []): Collection
+    public static function getAllWithSelected(int|array|string|null $productId, array $with = ['attributes']): Collection
     {
-        if (! is_array($productId)) {
-            $productId = $productId ? [$productId] : [];
-        }
-
-        if (func_num_args() == 1) {
-            $with = ['attributes'];
-        }
+        $productId = (array) $productId;
 
         return self::query()
             ->when($productId, function ($query) use ($productId): void {
                 $query
                     ->leftJoin('ec_product_with_attribute_set', function ($query) use ($productId): void {
-                        $query->on('ec_product_attribute_sets.id', 'ec_product_with_attribute_set.attribute_set_id')
+                        $query
+                            ->on('ec_product_attribute_sets.id', 'ec_product_with_attribute_set.attribute_set_id')
                             ->whereIn('ec_product_with_attribute_set.product_id', $productId);
                     })
                     ->select([
@@ -103,7 +99,8 @@ class ProductAttributeSet extends BaseModel
                     ]);
             })
             ->with($with)
-            ->orderBy('ec_product_attribute_sets.order')
+            ->oldest('ec_product_attribute_sets.order')
+            ->latest('ec_product_attribute_sets.created_at')
             ->wherePublished()
             ->get();
     }

@@ -3,29 +3,36 @@
 namespace Botble\Ecommerce\Http\Requests\API;
 
 use Botble\Ecommerce\Models\Product;
-use Illuminate\Foundation\Http\FormRequest;
+use Botble\Support\Http\Requests\Request;
 use Illuminate\Validation\Rule;
 
-class AddCartRequest extends FormRequest
+class AddCartRequest extends Request
 {
-    public function authorize()
-    {
-        return true;
-    }
-
     public function rules(): array
     {
-        $quantity = $this->input('quantity');
-
         return [
             'product_id' => [
                 'required',
                 Rule::exists(Product::class, 'id'),
             ],
-            'quantity' => [
+            'qty' => [
                 'required_with:product_id',
                 'integer',
                 'min:1',
+            ],
+        ];
+    }
+
+    public function bodyParameters(): array
+    {
+        return [
+            'product_id' => [
+                'description' => 'The ID of the product to add to the cart',
+                'example' => 1,
+            ],
+            'qty' => [
+                'description' => 'The quantity of the product to add',
+                'example' => 1,
             ],
         ];
     }

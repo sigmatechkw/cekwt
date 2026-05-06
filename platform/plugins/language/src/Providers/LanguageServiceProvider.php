@@ -8,9 +8,11 @@ use Botble\Base\PanelSections\PanelSectionItem;
 use Botble\Base\Supports\ServiceProvider;
 use Botble\Base\Traits\LoadAndPublishDataTrait;
 use Botble\Language\Facades\Language;
+use Botble\Language\Http\Middleware\ApiLanguageMiddleware;
 use Botble\Language\Http\Middleware\LocaleSessionRedirect;
 use Botble\Language\Http\Middleware\LocalizationRedirectFilter;
 use Botble\Language\Http\Middleware\LocalizationRoutes;
+use Botble\Language\LanguageManager;
 use Botble\Language\Models\Language as LanguageModel;
 use Botble\Language\Models\LanguageMeta;
 use Botble\Language\Repositories\Eloquent\LanguageMetaRepository;
@@ -29,6 +31,8 @@ class LanguageServiceProvider extends ServiceProvider
 
     public function register(): void
     {
+        $this->app->singleton(LanguageManager::class);
+
         $this->app->bind(LanguageInterface::class, function () {
             return new LanguageRepository(new LanguageModel());
         });
@@ -43,6 +47,7 @@ class LanguageServiceProvider extends ServiceProvider
         $router->aliasMiddleware('localize', LocalizationRoutes::class);
         $router->aliasMiddleware('localizationRedirect', LocalizationRedirectFilter::class);
         $router->aliasMiddleware('localeSessionRedirect', LocaleSessionRedirect::class);
+        $router->aliasMiddleware('api.language', ApiLanguageMiddleware::class);
     }
 
     public function boot(): void
@@ -53,7 +58,7 @@ class LanguageServiceProvider extends ServiceProvider
             ->setNamespace('plugins/language')
             ->loadHelpers()
             ->loadAndPublishConfigurations(['permissions'])
-            ->loadRoutes()
+            ->loadRoutes(['web', 'api'])
             ->loadAndPublishViews()
             ->loadAndPublishTranslations()
             ->loadMigrations()
@@ -94,7 +99,10 @@ class LanguageServiceProvider extends ServiceProvider
                 }
 
                 if (defined('THEME_OPTIONS_MODULE_SCREEN_NAME') && ! $this->app->isDownForMaintenance()) {
+                    // Deferred to footer container to avoid render-blocking on initial paint.
+                    // The language switcher briefly appears unstyled, acceptable trade-off for ~150ms LCP savings.
                     Theme::asset()
+                        ->container('footer')
                         ->usePath(false)
                         ->add(
                             'language-css',

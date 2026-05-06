@@ -17,6 +17,10 @@ class DiscountSupport
 
     public int|string $customerId = 0;
 
+    protected array $productCategoriesCache = [];
+
+    protected array $productCollectionsCache = [];
+
     public function __construct()
     {
         if (! is_in_admin() && auth('customer')->check()) {
@@ -55,10 +59,7 @@ class DiscountSupport
                     break;
 
                 case DiscountTargetEnum::PRODUCT_COLLECTIONS:
-                    $productCollectionIds = DB::table('ec_product_collection_products')
-                        ->whereIn('product_id', $productIds)
-                        ->pluck('product_collection_id')
-                        ->all();
+                    $productCollectionIds = $this->getProductCollectionIds($productIds);
 
                     foreach ($promotion->productCollections as $productCollection) {
                         if (in_array($productCollection->id, $productCollectionIds)) {
@@ -80,10 +81,7 @@ class DiscountSupport
                     break;
 
                 case DiscountTargetEnum::PRODUCT_CATEGORIES:
-                    $productCategoriesIds = DB::table('ec_product_category_product')
-                        ->whereIn('product_id', $productIds)
-                        ->pluck('category_id')
-                        ->all();
+                    $productCategoriesIds = $this->getProductCategoryIds($productIds);
 
                     foreach ($promotion->productCategories as $productCategories) {
                         if (in_array($productCategories->id, $productCategoriesIds)) {
@@ -145,7 +143,7 @@ class DiscountSupport
                 $customerId = auth('customer')->check() ? auth('customer')->id() : 0;
             }
 
-            if ($discount->target === DiscountTargetEnum::ONCE_PER_CUSTOMER && $customerId) {
+            if ($discount->target == DiscountTargetEnum::ONCE_PER_CUSTOMER && $customerId) {
                 $discount->usedByCustomers()->syncWithoutDetaching([$customerId]);
             }
         }
@@ -169,9 +167,74 @@ class DiscountSupport
                 $customerId = auth('customer')->check() ? auth('customer')->id() : 0;
             }
 
-            if ($discount->target === DiscountTargetEnum::ONCE_PER_CUSTOMER && $customerId) {
+            if ($discount->target == DiscountTargetEnum::ONCE_PER_CUSTOMER && $customerId) {
                 $discount->usedByCustomers()->detach($customerId);
             }
         }
+    }
+
+    protected function ensureProductRelationsLoaded(string $type, array $productIds): void
+    {
+        $missingIds = array_filter($productIds, fn ($id) => ! isset($this->productCategoriesCache[$id]));
+
+        if (in_array($type, ['categories', 'all']) && $missingIds) {
+            $categories = DB::table('ec_product_category_product')
+                ->select(['product_id', 'category_id'])
+                ->whereIn('product_id', $missingIds)
+                ->get();
+
+            foreach ($missingIds as $id) {
+                $this->productCategoriesCache[$id] ??= [];
+            }
+
+            foreach ($categories as $category) {
+                $this->productCategoriesCache[$category->product_id][] = $category->category_id;
+            }
+        }
+
+        $missingCollectionIds = array_filter($productIds, fn ($id) => ! isset($this->productCollectionsCache[$id]));
+
+        if (in_array($type, ['collections', 'all']) && $missingCollectionIds) {
+            $collections = DB::table('ec_product_collection_products')
+                ->select(['product_id', 'product_collection_id'])
+                ->whereIn('product_id', $missingCollectionIds)
+                ->get();
+
+            foreach ($missingCollectionIds as $id) {
+                $this->productCollectionsCache[$id] ??= [];
+            }
+
+            foreach ($collections as $collection) {
+                $this->productCollectionsCache[$collection->product_id][] = $collection->product_collection_id;
+            }
+        }
+    }
+
+    protected function getProductCategoryIds(array $productIds): array
+    {
+        $this->ensureProductRelationsLoaded('categories', $productIds);
+
+        $categoryIds = [];
+        foreach ($productIds as $productId) {
+            if (isset($this->productCategoriesCache[$productId])) {
+                $categoryIds = array_merge($categoryIds, $this->productCategoriesCache[$productId]);
+            }
+        }
+
+        return array_unique($categoryIds);
+    }
+
+    protected function getProductCollectionIds(array $productIds): array
+    {
+        $this->ensureProductRelationsLoaded('collections', $productIds);
+
+        $collectionIds = [];
+        foreach ($productIds as $productId) {
+            if (isset($this->productCollectionsCache[$productId])) {
+                $collectionIds = array_merge($collectionIds, $this->productCollectionsCache[$productId]);
+            }
+        }
+
+        return array_unique($collectionIds);
     }
 }

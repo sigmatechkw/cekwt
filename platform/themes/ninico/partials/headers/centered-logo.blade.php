@@ -1,6 +1,6 @@
 <header class="platinam-light">
     {!! Theme::partial('header-top', ['class' => 'platinam-bg platinam-header-top']) !!}
-    <div class="mainmenuarea platinam-menuarea mt-30 d-none d-xl-block">
+    <div class="mainmenuarea platinam-menuarea pt-30 d-none d-xl-block">
         <div class="container">
             <div class="row align-items-center">
                 @if (is_plugin_active('ecommerce'))
@@ -31,7 +31,7 @@
             </div>
         </div>
     </div>
-    <div class="main-menu-area mt-15 d-none d-xl-block">
+    <div class="main-menu-area pt-15 d-none d-xl-block">
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-xl-6">

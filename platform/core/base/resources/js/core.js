@@ -38,35 +38,39 @@ class Botble {
             return $(`<span><span class="dropdown-item-indicator">${text}</span> ${id}</span>`)
         }
 
-        Botble.select($coreIcon, {
-            ajax: {
-                url: $coreIcon.data('url'),
-                delay: 250,
-                cache: true,
-                data: function (params) {
-                    return {
-                        q: params.term,
-                        page: params.page || 1,
-                    }
+        Botble.select(
+            $coreIcon,
+            {
+                ajax: {
+                    url: $coreIcon.data('url'),
+                    delay: 250,
+                    cache: true,
+                    data: function (params) {
+                        return {
+                            q: params.term,
+                            page: params.page || 1,
+                        }
+                    },
+                    processResults: function ({ data }) {
+                        return {
+                            results: $.map(data.data, function (icon, name) {
+                                return {
+                                    text: icon,
+                                    id: name,
+                                }
+                            }),
+                            pagination: {
+                                more: data.next_page_url && Object.keys(data.data).length > 0,
+                            },
+                        }
+                    },
                 },
-                processResults: function ({ data }) {
-                    return {
-                        results: $.map(data.data, function (icon, name) {
-                            return {
-                                text: icon,
-                                id: name,
-                            }
-                        }),
-                        pagination: {
-                            more: data.next_page_url && Object.keys(data.data).length > 0,
-                        },
-                    }
-                },
+                placeholder: $coreIcon.data('placeholder'),
+                templateResult: formatTemplate,
+                templateSelection: formatTemplate,
             },
-            placeholder: $coreIcon.data('placeholder'),
-            templateResult: formatTemplate,
-            templateSelection: formatTemplate,
-        }, true)
+            true
+        )
     }
 
     static blockUI(options) {
@@ -159,6 +163,29 @@ class Botble {
                 Botble.showError(data.statusText)
             }
         }
+    }
+
+    static handleDatatableError(error) {
+        let errorMessage = BotbleVariables.languages.tables.error_loading
+            ? BotbleVariables.languages.tables.error_loading
+            : 'An error occurred while loading the data. Please refresh the page and try again.'
+
+        if (typeof error.responseJSON !== 'undefined') {
+            if (typeof error.responseJSON.message !== 'undefined') {
+                // Remove any sensitive information from error message
+                errorMessage = error.responseJSON.message
+                    .replace(/table\s+[a-zA-Z0-9_-]+/g, 'table')
+                    .replace('botble-', '')
+                    .replace(/column\s+['"]\w+['"]/g, 'column')
+                    .replace(/parameter\s+['"]\w+['"]/g, 'parameter')
+                    .replace(/row\s+\d+/g, 'row')
+                    .replace(/\s+for\s+\d+/g, '')
+                    .replace(/\s+\d+,\s+/g, ' ')
+                    .replace(/\s+\d+\./g, '.')
+            }
+        }
+
+        Botble.showError(errorMessage)
     }
 
     static handleValidationError(errors) {
@@ -430,13 +457,10 @@ class Botble {
 
                 $httpClient
                     .makeWithoutErrorHandler()
-                    .post(
-                        _self.data('url'),
-                        {
-                            _method: _self.data('method'),
-                            minimal_sidebar: navbar.hasClass('navbar-minimal') ? 'yes' : 'no'
-                        }
-                    )
+                    .post(_self.data('url'), {
+                        _method: _self.data('method'),
+                        minimal_sidebar: navbar.hasClass('navbar-minimal') ? 'yes' : 'no',
+                    })
                     .then(() => {})
                     .catch(() => {})
             }
@@ -445,7 +469,7 @@ class Botble {
 
     static initDatePicker(element) {
         if (jQuery().flatpickr) {
-            const $element = $(document).find(element);
+            const $element = $(document).find(element)
 
             const $input = $element.find('input')
 
@@ -465,6 +489,7 @@ class Botble {
                 dateFormat: format,
                 wrap: true,
                 locale: locale || 'en',
+                monthSelectorType: 'dropdown',
             }
 
             if ($input.data('options')) {
@@ -489,21 +514,9 @@ class Botble {
             }
         })
 
-        $(document).find('[data-bb-toggle="check-all"]').each(function (index, element) {
-            const $checkboxChildren = $(document).find($(element).attr('data-target'))
-
-            const $parent = $(element).find('input[type=checkbox]')
-
-            if ($checkboxChildren.length === $checkboxChildren.filter(':checked').length) {
-                $parent.prop('indeterminate', false)
-                $parent.prop('checked', true)
-            } else {
-                $parent.prop('indeterminate', true)
-            }
-        })
-
-        $(document).find('[data-bb-toggle="check-all"]').each(function (index, element) {
-            $(document).on('click', $(element).attr('data-target'), () => {
+        $(document)
+            .find('[data-bb-toggle="check-all"]')
+            .each(function (index, element) {
                 const $checkboxChildren = $(document).find($(element).attr('data-target'))
 
                 const $parent = $(element).find('input[type=checkbox]')
@@ -515,7 +528,23 @@ class Botble {
                     $parent.prop('indeterminate', true)
                 }
             })
-        })
+
+        $(document)
+            .find('[data-bb-toggle="check-all"]')
+            .each(function (index, element) {
+                $(document).on('click', $(element).attr('data-target'), () => {
+                    const $checkboxChildren = $(document).find($(element).attr('data-target'))
+
+                    const $parent = $(element).find('input[type=checkbox]')
+
+                    if ($checkboxChildren.length === $checkboxChildren.filter(':checked').length) {
+                        $parent.prop('indeterminate', false)
+                        $parent.prop('checked', true)
+                    } else {
+                        $parent.prop('indeterminate', true)
+                    }
+                })
+            })
 
         $(document).on('change', '.check-all', (event) => {
             let _self = $(event.currentTarget)
@@ -530,8 +559,26 @@ class Botble {
             })
         })
 
-        $(document).find('.check-all').each(function (index, element) {
-            $(document).on('click', $(element).attr('data-set'), () => {
+        $(document)
+            .find('.check-all')
+            .each(function (index, element) {
+                $(document).on('click', $(element).attr('data-set'), () => {
+                    const $checkboxChildren = $(document).find($(element).attr('data-set'))
+
+                    const $parent = $(element).find('input[type=checkbox]')
+
+                    if ($checkboxChildren.length === $checkboxChildren.filter(':checked').length) {
+                        $parent.prop('indeterminate', false)
+                        $parent.prop('checked', true)
+                    } else {
+                        $parent.prop('indeterminate', true)
+                    }
+                })
+            })
+
+        $(document)
+            .find('.check-all')
+            .each(function (index, element) {
                 const $checkboxChildren = $(document).find($(element).attr('data-set'))
 
                 const $parent = $(element).find('input[type=checkbox]')
@@ -543,20 +590,6 @@ class Botble {
                     $parent.prop('indeterminate', true)
                 }
             })
-        })
-
-        $(document).find('.check-all').each(function (index, element) {
-            const $checkboxChildren = $(document).find($(element).attr('data-set'))
-
-            const $parent = $(element).find('input[type=checkbox]')
-
-            if ($checkboxChildren.length === $checkboxChildren.filter(':checked').length) {
-                $parent.prop('indeterminate', false)
-                $parent.prop('checked', true)
-            } else {
-                $parent.prop('indeterminate', true)
-            }
-        })
 
         $.each($(document).find('select.select-search-full'), function (index, element) {
             Botble.select(element)
@@ -571,15 +604,17 @@ class Botble {
         $(document)
             .find('select.select-autocomplete')
             .each(function (index, element) {
+                const $element = $(element)
+
                 Botble.select(element, {
-                    minimumInputLength: $(element).data('minimum-input') || 1,
+                    minimumInputLength: $element.data('minimum-input') || 1,
                     width: '100%',
                     delay: 250,
                     ajax: {
-                        url: $(element).data('url'),
+                        url: $element.data('url'),
                         data: (params) => ({ q: params.term, page: params.page || 1 }),
                         dataType: 'json',
-                        type: $(element).data('type') || 'GET',
+                        type: $element.data('type') || 'GET',
                         processResults: function (response) {
                             return {
                                 results: $.map(response.data, function (item) {
@@ -609,7 +644,7 @@ class Botble {
                 placeholder: $element.data('placeholder'),
             })
 
-            if ($(this).hasClass('.select-sorting')) {
+            if ($(this).hasClass('select-sorting')) {
                 $(this).on('select2:select', function (e) {
                     const $element = $(e.params.data.element)
 
@@ -702,24 +737,26 @@ class Botble {
             })
 
         if (jQuery().timepicker) {
-            $('.timepicker-default').timepicker({
+            $(document).find('.timepicker-default').timepicker({
                 autoclose: true,
                 showSeconds: false,
                 minuteStep: 1,
                 defaultTime: false,
             })
 
-            $('.timepicker-24').timepicker({
-                autoclose: true,
-                minuteStep: 5,
-                showSeconds: false,
-                showMeridian: false,
-                defaultTime: false,
-                icons: {
-                    up: 'icon ti ti-chevron-up',
-                    down: 'icon ti ti-chevron-down',
-                },
-            })
+            $(document)
+                .find('.timepicker-24')
+                .timepicker({
+                    autoclose: true,
+                    minuteStep: 5,
+                    showSeconds: false,
+                    showMeridian: false,
+                    defaultTime: false,
+                    icons: {
+                        up: 'icon fa fa-chevron-up',
+                        down: 'icon fa fa-chevron-down',
+                    },
+                })
         }
 
         if (jQuery().inputmask) {
@@ -813,19 +850,20 @@ class Botble {
         }
 
         function urlify(text) {
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const urlRegex = /(https?:\/\/[^\s]+)/g
 
             if (
-                text.includes('<a ')
-                || text.includes('</a>')
-                || text.includes(' href=')
-                || text.includes('target="_blank"')
+                text.includes('<a ') ||
+                text.includes('</a>') ||
+                text.includes(' href=') ||
+                text.includes('target="_blank"') ||
+                text.includes('<img src="')
             ) {
                 return text
             }
 
-            return text.replace(urlRegex, function(url) {
-                return '<a href="' + url + '" target="_blank">' + url + '</a>';
+            return text.replace(urlRegex, function (url) {
+                return '<a href="' + url + '" target="_blank">' + url + '</a>'
             })
         }
 
@@ -1034,6 +1072,10 @@ class Botble {
                                     let content = ''
                                     $.each(files, (index, file) => {
                                         let link = file.full_url
+                                        // Convert absolute URL to relative URL
+                                        if (link && link.startsWith(window.location.origin)) {
+                                            link = link.replace(window.location.origin, '')
+                                        }
                                         if (file.type === 'youtube') {
                                             link = link.replace('watch?v=', 'embed/')
                                             content +=
@@ -1056,6 +1098,10 @@ class Botble {
                                     let html = ''
                                     $.each(files, (index, file) => {
                                         let link = file.full_url
+                                        // Convert absolute URL to relative URL
+                                        if (link && link.startsWith(window.location.origin)) {
+                                            link = link.replace(window.location.origin, '')
+                                        }
                                         if (file.type === 'youtube') {
                                             link = link.replace('watch?v=', 'embed/')
                                             html += `<iframe width='420' height='315' src='${link}' allowfullscreen loading='lazy'></iframe><br />`
@@ -1239,7 +1285,6 @@ class Botble {
                         folderId: 0,
                     })
                     .then(({ data }) => {
-                        form[0].reset()
                         modal.modal('hide')
 
                         const $imageBox = $(form.find('input[name="image-box-target"]').val())
@@ -1248,9 +1293,12 @@ class Botble {
                         $imageBox.find('[data-bb-toggle="image-picker-remove"]').show()
                         $imageBox.find('.preview-image').removeClass('default-image')
                         $imageBox.find('.preview-image-wrapper').show()
+
+                        setTimeout(function () {
+                            form[0].reset()
+                        }, 1000)
                     })
             } else {
-                form[0].reset()
                 modal.modal('hide')
 
                 const $imageBox = $(form.find('input[name="image-box-target"]').val())
@@ -1259,6 +1307,10 @@ class Botble {
                 $imageBox.find('[data-bb-toggle="image-picker-remove"]').show()
                 $imageBox.find('.preview-image').removeClass('default-image')
                 $imageBox.find('.preview-image-wrapper').show()
+
+                setTimeout(function () {
+                    form[0].reset()
+                }, 1000)
             }
         })
 
@@ -1382,26 +1434,96 @@ class Botble {
     }
 
     processAuthorize() {
+        // Check if we should make the membership authorization request
+        const shouldMakeAuthRequest = () => {
+            const lastAuthTime = localStorage.getItem('membership_authorization_time')
+            if (!lastAuthTime) {
+                return true
+            }
+
+            // Call once every 3 days (259200000 ms)
+            const threeDaysInMs = 3 * 24 * 60 * 60 * 1000
+            return Date.now() - parseInt(lastAuthTime) > threeDaysInMs
+        }
+
+        if (!shouldMakeAuthRequest()) {
+            return
+        }
+
         $httpClient
             .makeWithoutErrorHandler()
             .post(BotbleVariables.authorize_url)
-            .catch(() => {})
+            .then(() => {
+                // Store the current time as the last authorization time
+                localStorage.setItem('membership_authorization_time', Date.now().toString())
+            })
+            .catch(() => {
+                // Even on error, we've made the request, so store the time
+                localStorage.setItem('membership_authorization_time', Date.now().toString())
+            })
     }
 
     countMenuItemNotifications() {
         let $menuItems = $('.menu-item-count')
         if ($menuItems.length) {
+            // Check if we should make the menu items count request
+            const shouldCheckMenuItemsCount = () => {
+                const lastCheckTime = localStorage.getItem('menu_items_count_check_time')
+                if (!lastCheckTime) {
+                    return true
+                }
+
+                // Call once every 3 minutes (180000 ms)
+                const threeMinutesInMs = 3 * 60 * 1000
+                return Date.now() - parseInt(lastCheckTime) > threeMinutesInMs
+            }
+
+            // Try to get cached menu items count data
+            const cachedMenuItemsCount = localStorage.getItem('menu_items_count_data')
+
+            if (cachedMenuItemsCount && !shouldCheckMenuItemsCount()) {
+                try {
+                    const cachedData = JSON.parse(cachedMenuItemsCount)
+                    this.updateMenuItemsCount(cachedData)
+                    return
+                } catch (e) {
+                    // If there's an error parsing the cached data, proceed with the request
+                }
+            }
+
+            if (!shouldCheckMenuItemsCount()) {
+                return
+            }
+
             $httpClient
                 .make()
                 .get($menuItems.data('url') || BotbleVariables.menu_item_count_url)
                 .then(({ data }) => {
-                    data.data.map((x) => {
-                        if (x.value > 0) {
-                            $(`.menu-item-count.${x.key}`).text(x.value).show().removeClass('hidden')
-                        }
-                    })
+                    // Store the current time as the last check time
+                    localStorage.setItem('menu_items_count_check_time', Date.now().toString())
+
+                    // Store the menu items count data
+                    localStorage.setItem('menu_items_count_data', JSON.stringify(data.data))
+
+                    this.updateMenuItemsCount(data.data)
+                })
+                .catch(() => {
+                    // Even on error, we've made the request, so store the time
+                    localStorage.setItem('menu_items_count_check_time', Date.now().toString())
                 })
         }
+    }
+
+    updateMenuItemsCount(data) {
+        if (!data) {
+            return
+        }
+
+        data.map((x) => {
+            if (x.value > 0) {
+                $(`.menu-item-count.${x.key}`).text(x.value).show().removeClass('hidden')
+            }
+        })
     }
 
     static initFieldCollapse() {
@@ -1425,8 +1547,8 @@ class Botble {
                     ? targetElement.slideUp()
                     : targetElement.slideDown()
                 : isChecked
-                    ? targetElement.slideDown()
-                    : targetElement.slideUp()
+                  ? targetElement.slideDown()
+                  : targetElement.slideUp()
         }
 
         const handleValueBasedCollapse = (target, value) => {
@@ -1635,7 +1757,7 @@ class Botble {
     static select(element, options = {}, force = false) {
         const $element = $(element)
 
-        if (!jQuery().select2 || ($element.hasClass('select2-hidden-accessible') && ! force)) {
+        if (!jQuery().select2 || ($element.hasClass('select2-hidden-accessible') && !force)) {
             return
         }
 
@@ -1646,7 +1768,10 @@ class Botble {
             ...options,
         }
 
-        let parent = $element.closest('div[data-select2-dropdown-parent]') || $element.closest('.modal-content') || $element.closest('.modal')
+        let parent =
+            $element.closest('div[data-select2-dropdown-parent]') ||
+            $element.closest('.modal-content') ||
+            $element.closest('.modal')
 
         if (parent.length) {
             options.dropdownParent = parent
@@ -1913,7 +2038,9 @@ class Botble {
             } else {
                 if ($wrapper.length) {
                     $.map($wrapper, function (item) {
-                        $(item).find('> span').text($(item).data('placeholder') || ' ')
+                        $(item)
+                            .find('> span')
+                            .text($(item).data('placeholder') || ' ')
                     })
                 }
             }
@@ -2054,7 +2181,7 @@ class Botble {
             $form.find('input.input-mask-number').map(function (i, e) {
                 const $input = $(e)
                 if ($input.inputmask) {
-                    if ($.isArray(formData)) {
+                    if (Array.isArray(formData)) {
                         formData[$input.attr('name')] = $input.inputmask('unmaskedvalue')
                     } else {
                         formData.append($input.attr('name'), $input.inputmask('unmaskedvalue'))

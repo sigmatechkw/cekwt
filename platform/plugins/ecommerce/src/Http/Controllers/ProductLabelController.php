@@ -55,6 +55,12 @@ class ProductLabelController extends BaseController
     {
         ProductLabelForm::createFromModel($productLabel)->setRequest($request)->save();
 
+        if ($productIds = $request->input('label_products')) {
+            $productIds = array_filter(explode(',', $productIds));
+        }
+
+        $productLabel->products()->sync($productIds ?: []);
+
         return $this
             ->httpResponse()
             ->setPreviousUrl(route('product-label.index'))

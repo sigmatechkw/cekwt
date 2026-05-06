@@ -4,7 +4,7 @@
     &-title {
         position: relative;
         z-index: 1;
-        border-top: 1px solid #E0E2E3;
+        border-top: 1px solid #e0e2e3;
         padding-top: 40px;
         padding-bottom: 15px;
         margin-top: 40px;
@@ -12,7 +12,7 @@
 
         p {
             font-size: 15px;
-            color: #55585B;
+            color: #55585b;
             margin-bottom: 0;
             padding: 0 20px;
             position: relative;
@@ -46,14 +46,14 @@
             }
 
             &.facebook-login {
-                background-color: #1877F2;
+                background-color: #1877f2;
                 color: #fff;
             }
 
             &.google-login {
                 background-color: #fff;
-                color: #55585B;
-                border: 1px solid #F2F3F4;
+                color: #55585b;
+                border: 1px solid #f2f3f4;
             }
 
             &.apple-login {
@@ -64,14 +64,15 @@
 
             &.github-login {
                 background-color: #fff;
-                color: #55585B;
-                border: 1px solid #F2F3F4;
+                color: #55585b;
+                border: 1px solid #f2f3f4;
             }
 
-            &.linkedin-login, &.linkedin-openid-login {
+            &.linkedin-login,
+            &.linkedin-openid-login {
                 background-color: #fff;
-                color: #55585B;
-                border: 1px solid #F2F3F4;
+                color: #55585b;
+                border: 1px solid #f2f3f4;
             }
 
             &:hover {
@@ -135,30 +136,30 @@
             }
 
             .google {
-                background-color: #DB4437;
+                background-color: #db4437;
                 color: #fff;
 
                 &:hover {
-                    background-color: #C13505;
+                    background-color: #c13505;
                 }
             }
 
             .linkedin,
             .linkedin-openid {
-                background-color: #0A66C2;
+                background-color: #0a66c2;
                 color: #fff;
 
                 &:hover {
-                    background-color: #0A5CBA;
+                    background-color: #0a5cba;
                 }
             }
 
             .facebook {
-                background-color: #4267B2;
+                background-color: #4267b2;
                 color: #fff;
 
                 &:hover {
-                    background-color: #3A5795;
+                    background-color: #3a5795;
                 }
             }
 

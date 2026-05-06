@@ -1,10 +1,10 @@
 @extends('plugins/ecommerce::orders.master')
 
-@section('title', __('Checkout'))
+@section('title', theme_option('ecommerce_checkout_seo_title') ?: __('Checkout'))
 
 @section('content')
     @if (Cart::instance('cart')->isNotEmpty())
-        @if (is_plugin_active('payment') && $orderAmount)
+        @if (is_plugin_active('payment'))
             @include('plugins/payment::partials.header')
         @endif
 
@@ -23,5 +23,6 @@
 @stop
 
 @push('footer')
-    <script type="text/javascript" src="{{ asset('vendor/core/core/js-validation/js/js-validation.js') }}?v=1.0.1"></script>
+    <script type="text/javascript" src="{{ asset('vendor/core/core/base/libraries/jquery-compat/jquery4-compat.js') }}?v={{ EcommerceHelper::getAssetVersion() }}"></script>
+    <script type="text/javascript" src="{{ asset('vendor/core/core/js-validation/js/js-validation.js') }}?v={{ EcommerceHelper::getAssetVersion() }}"></script>
 @endpush

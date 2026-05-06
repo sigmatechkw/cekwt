@@ -14,10 +14,13 @@ Theme::registerRoutes(function (): void {
 
         Route::get('/', 'getIndex')->name('public.index');
 
-        Route::get('{key}.{extension}', 'getSiteMapIndex')
-            ->where('key', '^' . collect(SiteMapManager::getKeys())->map(fn ($item) => '(?:' . $item . ')')->implode('|') . '$')
-            ->whereIn('extension', SiteMapManager::allowedExtensions())
-            ->name('public.sitemap.index');
+        if (setting('sitemap_enabled', true)) {
+            Route::get('sitemap.xml', 'getSiteMap')->name('public.sitemap');
+
+            Route::get('{key}.{extension}', 'getSiteMapIndex')
+                ->whereIn('extension', SiteMapManager::allowedExtensions())
+                ->name('public.sitemap.index');
+        }
 
         Route::get('{slug?}', 'getView')->name('public.single');
 

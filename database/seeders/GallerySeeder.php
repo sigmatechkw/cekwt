@@ -34,14 +34,23 @@ class GallerySeeder extends BaseSeeder
             ],
         ];
 
-        $faker = $this->fake();
+        $descriptions = [
+            'A stunning capture of natural beauty that showcases the perfect blend of light and shadow.',
+            'This breathtaking moment frozen in time represents the essence of artistic photography.',
+            'An exquisite composition that brings together vibrant colors and exceptional detail.',
+            'A masterpiece of visual storytelling that speaks to the heart and soul of the viewer.',
+            'Captured with precision and artistry, this image embodies the spirit of creative expression.',
+            'A remarkable display of photographic excellence that transcends ordinary imagery.',
+        ];
 
         $images = [];
+        $index = 0;
         foreach ($this->getFilesFromPath('galleries') as $item) {
             $images[] = [
                 'img' => $item,
-                'description' => $faker->text(150),
+                'description' => $descriptions[$index % count($descriptions)],
             ];
+            $index++;
         }
 
         foreach ($galleries as $index => &$item) {

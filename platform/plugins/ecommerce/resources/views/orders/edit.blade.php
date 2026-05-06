@@ -21,6 +21,7 @@
                             <div class="col-md-6 offset-md-6">
                                 @include('plugins/ecommerce::orders.edit.order-info', [
                                     'isInAdmin' => true,
+                                    'proofDownloadUrl' => route('orders.download-proof', $order->id),
                                 ])
 
                                 <div class="btn-list justify-content-end my-3">
@@ -140,6 +141,79 @@
                                         @endif
                                     </div>
                                 @endif
+
+                                @if (is_plugin_active('payment') && $order->payment->id && $order->payment->status == \Botble\Payment\Enums\PaymentStatusEnum::REFUNDED)
+                                    <div class="text-uppercase">
+                                        <x-core::icon name="ti ti-receipt-refund" class="text-warning" />
+                                        {{ trans('plugins/ecommerce::order.payment_was_refunded') }}
+                                    </div>
+
+                                    <div class="mt-2">
+                                        <p class="mb-1">
+                                            <strong>{{ trans('plugins/ecommerce::order.refunded_amount') }}:</strong>
+                                            {{ format_price($order->payment->refunded_amount) }}
+                                        </p>
+
+                                        @if ($order->payment->refund_note)
+                                            <p class="mb-1">
+                                                <strong>{{ trans('plugins/ecommerce::order.refund_note') }}:</strong>
+                                                {{ $order->payment->refund_note }}
+                                            </p>
+                                        @endif
+
+                                        @php
+                                            $refunds = $order->payment->metadata['refunds'] ?? [];
+                                        @endphp
+
+                                        @if (count($refunds) === 1)
+                                            @php
+                                                $refund = $refunds[0];
+                                                $refundDate = isset($refund['_data_request']['created_at']) ? \Carbon\Carbon::parse($refund['_data_request']['created_at'])->format('Y-m-d H:i:s') : '-';
+                                                $refundAmount = isset($refund['refunded_amount_in_currency']) ? format_price($refund['refunded_amount_in_currency']) : (isset($refund['amount']) ? format_price($refund['amount'] / 100) : '-');
+                                                $refundStatus = $refund['status'] ?? '-';
+                                            @endphp
+
+                                            <p class="mb-1">
+                                                <strong>{{ trans('plugins/ecommerce::order.created_at') }}:</strong>
+                                                {{ $refundDate }}
+                                            </p>
+                                            <p class="mb-1">
+                                                <strong>{{ trans('plugins/ecommerce::order.status') }}:</strong>
+                                                <span class="badge text-white bg-{{ $refundStatus == 'succeeded' ? 'success' : 'secondary' }}">
+                                                    {{ $refundStatus }}
+                                                </span>
+                                            </p>
+                                        @elseif (count($refunds) > 1)
+                                            <div class="mt-2">
+                                                <strong>{{ trans('plugins/ecommerce::order.refund_transactions') }}:</strong>
+                                                <div class="table-responsive mt-1">
+                                                    <table class="table table-sm">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>{{ trans('plugins/ecommerce::order.created_at') }}</th>
+                                                                <th>{{ trans('plugins/ecommerce::order.amount') }}</th>
+                                                                <th>{{ trans('plugins/ecommerce::order.status') }}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach ($refunds as $refund)
+                                                                <tr>
+                                                                    <td>{{ isset($refund['_data_request']['created_at']) ? \Carbon\Carbon::parse($refund['_data_request']['created_at'])->format('Y-m-d H:i:s') : '-' }}</td>
+                                                                    <td>{{ isset($refund['refunded_amount_in_currency']) ? format_price($refund['refunded_amount_in_currency']) : (isset($refund['amount']) ? format_price($refund['amount'] / 100) : '-') }}</td>
+                                                                    <td>
+                                                                        <span class="badge text-white bg-{{ isset($refund['status']) && $refund['status'] == 'succeeded' ? 'success' : 'secondary' }}">
+                                                                            {{ $refund['status'] ?? '-' }}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
                             </div>
                         @endif
 
@@ -176,7 +250,7 @@
 
                             @if(! EcommerceHelper::isDisabledPhysicalProduct())
                                 @if (! $order->shipment->id)
-                                    <div class="shipment-create-wrap" style="display: none;"></div>
+                                    <div class="p-3 shipment-create-wrap" style="display: none;"></div>
                                 @else
                                     @include('plugins/ecommerce::orders.shipment-detail', [
                                         'shipment' => $order->shipment,
@@ -189,7 +263,8 @@
 
                 @include('plugins/ecommerce::orders.partials.digital-product-downloads-info', compact('order'))
 
-                <x-core::card>
+                @if ($order->histories()->exists())
+                    <x-core::card>
                     <x-core::card.header>
                         <x-core::card.title>
                             {{ trans('plugins/ecommerce::order.history') }}
@@ -197,7 +272,7 @@
                     </x-core::card.header>
 
                     <x-core::card.body>
-                        <ul class="steps steps-vertical" id="order-history-wrapper">
+                        <ul class="steps steps-vertical border-0 p-0 m-0" id="order-history-wrapper">
                             @foreach ($order->histories()->orderByDesc('id')->get() as $history)
                                 <li @class(['step-item', 'user-action' => $history->user_id])>
                                     <div class="h4 m-0">
@@ -207,10 +282,10 @@
                                                 data-target="#history-line-{{ $history->id }}"
                                                 href="javascript:void(0)"
                                             >
-                                                {{ OrderHelper::processHistoryVariables($history) }}
+                                                {!! OrderHelper::processHistoryVariables($history) !!}
                                             </a>
                                         @else
-                                            {{ OrderHelper::processHistoryVariables($history) }}
+                                            {!! OrderHelper::processHistoryVariables($history) !!}
                                         @endif
                                     </div>
                                     <div class="text-secondary">{{ BaseHelper::formatDateTime($history->created_at) }}</div>
@@ -240,7 +315,7 @@
                                                             {{ trans('plugins/ecommerce::order.description') }}
                                                         </x-core::table.body.cell>
                                                         <x-core::table.body.cell>
-                                                            {{ $history->description . ' ' . trans('plugins/ecommerce::order.from') . ' ' . $order->payment->payment_channel->label() }}
+                                                            {{ $history->description . ' ' . trans('plugins/ecommerce::order.from') . ' ' . $order->payment->payment_channel->displayName() }}
                                                         </x-core::table.body.cell>
                                                     </x-core::table.body.row>
                                                     <x-core::table.body.row>
@@ -284,6 +359,16 @@
                                                             {{ BaseHelper::formatDateTime($history->created_at) }}
                                                         </x-core::table.body.cell>
                                                     </x-core::table.body.row>
+                                                    @if (Arr::get($history->extras, 'refund_note'))
+                                                        <x-core::table.body.row>
+                                                            <x-core::table.body.cell>
+                                                                {{ trans('plugins/ecommerce::order.refund_reason') }}
+                                                            </x-core::table.body.cell>
+                                                            <x-core::table.body.cell>
+                                                                {{ Arr::get($history->extras, 'refund_note') }}
+                                                            </x-core::table.body.cell>
+                                                        </x-core::table.body.row>
+                                                    @endif
                                                 </x-core::table.body>
                                             </x-core::table>
                                         </div>
@@ -312,9 +397,9 @@
                                                     <x-core::table.body.cell>
                                                         {{ trans('plugins/ecommerce::order.description') }}
                                                     </x-core::table.body.cell>
-                                                    <x-core::table.body.cell>{!! trans('plugins/ecommerce::order.mark_payment_as_confirmed', [
-                                                                'method' => $order->payment->payment_channel->label(),
-                                                            ]) !!}
+                                                    <x-core::table.body.cell>{!! BaseHelper::clean(trans('plugins/ecommerce::order.mark_payment_as_confirmed', [
+                                                                'method' => $order->payment->payment_channel->displayName(),
+                                                            ])) !!}
                                                     </x-core::table.body.cell>
                                                 </x-core::table.body.row>
                                                 <x-core::table.body.row>
@@ -330,7 +415,7 @@
                                                         {{ trans('plugins/ecommerce::order.payment_gateway') }}
                                                     </x-core::table.body.cell>
                                                     <x-core::table.body.cell>
-                                                        {{ $order->payment->payment_channel->label() }}
+                                                        {{ $order->payment->payment_channel->displayName() }}
                                                     </x-core::table.body.cell>
                                                 </x-core::table.body.row>
                                                 <x-core::table.body.row>
@@ -375,7 +460,7 @@
                                             type="button"
                                             color="primary"
                                             :outlined="true"
-                                            class="btn-trigger-resend-order-confirmation-modal position-absolute top-0 end-0 d-print-none"
+                                            class="btn-trigger-resend-order-confirmation-modal position-absolute top-0 end-0 d-print-none me-3"
                                             :data-action="route('orders.send-order-confirmation-email', $history->order_id)"
                                         >
                                             {{ trans('plugins/ecommerce::order.resend') }}
@@ -386,6 +471,7 @@
                         </ul>
                     </x-core::card.body>
                 </x-core::card>
+                @endif
             </div>
 
             <div class="col-md-3">
@@ -411,7 +497,7 @@
                             @if ($userInfo->id)
                                 <p class="mb-1">
                                     <x-core::icon name="ti ti-inbox" />
-                                    {{ $userInfo->orders()->count() }}
+                                    {{ $userInfo->completedOrders()->count() }}
                                     {{ trans('plugins/ecommerce::order.orders') }}
                                 </p>
                             @endif
@@ -546,14 +632,7 @@
                             </div>
                         @endif
 
-                        @if (is_plugin_active('marketplace') && $order->store->name)
-                            <div class="hr my-1"></div>
-
-                            <div class="p-3">
-                                <h4 class="mb-2">{{ trans('plugins/marketplace::store.store') }}</h4>
-                                <a href="{{ $order->store->url }}" target="_blank">{{ $order->store->name }}</a>
-                            </div>
-                        @endif
+                        {!! apply_filters('ecommerce_order_detail_extra_info', '', $order) !!}
                     </x-core::card.body>
 
                     <x-core::card.footer>
@@ -627,7 +706,7 @@
         type="info"
         :title="trans('plugins/ecommerce::order.confirm_payment')"
         :description="trans('plugins/ecommerce::order.confirm_payment_confirmation_description', [
-            'method' => $order->payment->payment_channel->label(),
+            'method' => $order->payment->payment_channel->displayName(),
         ])"
         :submit-button-attrs="['id' => 'confirm-payment-order-button']"
         :submit-button-label="trans('plugins/ecommerce::order.confirm_payment')"

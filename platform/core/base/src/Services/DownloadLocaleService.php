@@ -15,7 +15,7 @@ class DownloadLocaleService
 {
     public const REPOSITORY = 'botble/translations';
 
-    public function handle(string $locale): void
+    public function handle(string $locale, bool $includeVendor = true): void
     {
         if (! File::isWritable(lang_path())) {
             throw new Exception('The "language" directory is not writable.');
@@ -34,14 +34,14 @@ class DownloadLocaleService
         }
 
         $destination = storage_path('app/translations.zip');
-        $path = storage_path("app/translations-master/{$locale}");
+        $path = storage_path("app/translations-develop/{$locale}");
 
         BaseHelper::maximumExecutionTimeAndMemoryLimit();
 
         Http::withoutVerifying()
             ->timeout(300)
             ->sink(Utils::tryFopen($destination, 'w'))
-            ->get(sprintf('https://github.com/%s/archive/refs/heads/master.zip', self::REPOSITORY))
+            ->get(sprintf('https://github.com/%s/archive/refs/heads/develop.zip', self::REPOSITORY))
             ->throw();
 
         $zip = new Zipper();
@@ -50,8 +50,8 @@ class DownloadLocaleService
 
         File::copyDirectory("{$path}/{$locale}", lang_path($locale));
 
-        if (File::isDirectory("{$path}/vendor")) {
-            File::copyDirectory("{$path}/vendor", lang_path('vendor'));
+        if ($includeVendor && File::isDirectory("{$path}/vendor")) {
+            $this->copyLocaleVendorFiles("{$path}/vendor", lang_path('vendor'), $locale);
         }
 
         if (class_exists('Theme')) {
@@ -69,7 +69,52 @@ class DownloadLocaleService
         }
 
         File::delete($destination);
-        File::deleteDirectory(storage_path('app/translations-master'));
+        File::deleteDirectory(storage_path('app/translations-develop'));
+    }
+
+    protected function copyLocaleVendorFiles(string $source, string $destination, string $locale): void
+    {
+        // Copy only the target locale's files from vendor namespaces (core/packages/plugins).
+        // This prevents the downloaded repo from overwriting published English files
+        // (lang/vendor/{namespace}/*/en/*.php), which Laravel merges over plugin sources
+        // via FileLoader::loadNamespaceOverrides and would shadow current strings with
+        // stale values from the translations repo.
+        foreach (['core', 'packages', 'plugins'] as $namespace) {
+            $namespaceDir = "{$source}/{$namespace}";
+
+            if (! File::isDirectory($namespaceDir)) {
+                continue;
+            }
+
+            foreach (File::directories($namespaceDir) as $moduleDir) {
+                $localeSource = $moduleDir . DIRECTORY_SEPARATOR . $locale;
+
+                if (! File::isDirectory($localeSource)) {
+                    continue;
+                }
+
+                $moduleName = basename($moduleDir);
+                File::copyDirectory($localeSource, "{$destination}/{$namespace}/{$moduleName}/{$locale}");
+            }
+        }
+
+        // Copy only the target locale's JSON for each theme (vendor/themes/{theme}/{locale}.json).
+        $themesDir = "{$source}/themes";
+
+        if (File::isDirectory($themesDir)) {
+            foreach (File::directories($themesDir) as $themeDir) {
+                $localeJson = $themeDir . DIRECTORY_SEPARATOR . "{$locale}.json";
+
+                if (! File::exists($localeJson)) {
+                    continue;
+                }
+
+                $themeName = basename($themeDir);
+                $destFile = "{$destination}/themes/{$themeName}/{$locale}.json";
+                File::ensureDirectoryExists(dirname($destFile));
+                File::copy($localeJson, $destFile);
+            }
+        }
     }
 
     public function getAvailableLocales(): array
@@ -80,7 +125,7 @@ class DownloadLocaleService
             $data = Http::withoutVerifying()
                 ->asJson()
                 ->acceptJson()
-                ->get(sprintf('https://api.github.com/repos/%s/git/trees/master', self::REPOSITORY))
+                ->get(sprintf('https://api.github.com/repos/%s/git/trees/develop', self::REPOSITORY))
                 ->json('tree');
 
             foreach ($data as $item) {

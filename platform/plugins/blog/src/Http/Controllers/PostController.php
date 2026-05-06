@@ -101,7 +101,7 @@ class PostController extends BaseController
 
         $posts = Post::query()
             ->with(['slugable'])
-            ->orderByDesc('created_at')
+            ->latest()
             ->limit($limit)
             ->get();
 

@@ -15,8 +15,8 @@ class Tags extends AbstractWidget
     public function __construct()
     {
         parent::__construct([
-            'name' => __('Tags'),
-            'description' => __('Popular tags'),
+            'name' => trans('plugins/blog::posts.widget_tags'),
+            'description' => trans('plugins/blog::posts.widget_tags_description'),
             'number_display' => 5,
         ]);
     }
@@ -36,7 +36,7 @@ class Tags extends AbstractWidget
                 'number_display',
                 NumberField::class,
                 NumberFieldOption::make()
-                    ->label(__('Number tags to display'))
+                    ->label(trans('plugins/blog::base.number_tags_to_display'))
             );
     }
 

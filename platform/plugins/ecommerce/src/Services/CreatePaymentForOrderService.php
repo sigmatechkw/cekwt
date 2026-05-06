@@ -38,15 +38,19 @@ class CreatePaymentForOrderService
          */
         $user = Auth::user();
 
+        // Get payment fee directly from payment settings
+        $paymentFee = (float) get_payment_setting('fee', $paymentMethod, 0);
+
         $data = [
             'amount' => $order->amount,
+            'payment_fee' => $paymentFee,
             'currency' => cms_currency()->getDefaultCurrency()->title,
             'payment_channel' => $paymentMethod,
             'status' => $paymentStatus,
             'payment_type' => 'confirm',
             'order_id' => $order->getKey(),
             'charge_id' => $chargeId ?: Str::upper(Str::random(10)),
-            'user_id' => $user->getKey(),
+            'user_id' => $user?->getKey(),
         ];
 
         if ($customerId) {
@@ -71,7 +75,7 @@ class CreatePaymentForOrderService
                     'money' => format_price($order->amount),
                 ]),
                 'order_id' => $order->getKey(),
-                'user_id' => $user->getKey(),
+                'user_id' => $user?->getKey(),
             ]);
         }
     }

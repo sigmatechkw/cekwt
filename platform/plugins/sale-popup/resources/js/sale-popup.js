@@ -1,5 +1,9 @@
 let salesPopup = function ($popupContainer) {
-    if ($(window).width() < 768) {
+    // Check if we should show on mobile
+    const showOnMobile = $('.js-sale-popup-container').data('show-on-mobile') === true;
+
+    // If we're on mobile and showOnMobile is false, return early
+    if (!showOnMobile && $(window).width() < 768) {
         return
     }
 
@@ -113,9 +117,37 @@ $(document).ready(function () {
         setTimeout(() => {
             $popupContainer.removeClass('hidden')
 
-            $popupContainer.load($popupContainer.data('include'), function () {
-                salesPopup($popupContainer.find('.sale-popup-container-wrap'))
+            // Assuming $popupContainer is a jQuery object
+            const url = $popupContainer.data('include');
+
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json', // Sending JSON
+                    'Accept': 'application/json' // Requesting JSON response
+                }
             })
+                .then(response => {
+                    // Check if the response is okay and parse it as JSON
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(({ data }) => {
+                    // Insert the fetched HTML into the $popupContainer
+                    $popupContainer.html(data);
+
+                    if (typeof Theme.lazyLoadInstance !== 'undefined') {
+                        Theme.lazyLoadInstance.update()
+                    }
+
+                    // Call salesPopup with the newly added content
+                    salesPopup($popupContainer.find('.sale-popup-container-wrap'));
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                });
         }, 3000)
     }
 })

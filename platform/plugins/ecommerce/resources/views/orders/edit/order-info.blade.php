@@ -14,14 +14,15 @@
                 {{ format_price($order->sub_total) }}
             </x-core::table.body.cell>
         </x-core::table.body.row>
+        {!! apply_filters('ecommerce_admin_order_after_subtotal', null, $order) !!}
         <x-core::table.body.row>
             <x-core::table.body.cell>
                 {{ trans('plugins/ecommerce::order.discount') }}
                 @if ($order->coupon_code)
                     <p class="mb-0">
-                        {!! trans('plugins/ecommerce::order.coupon_code', [
+                        {!! BaseHelper::clean(trans('plugins/ecommerce::order.coupon_code', [
                             'code' => Html::tag('strong', $order->coupon_code)->toHtml(),
-                        ]) !!}
+                        ])) !!}
                     </p>
                 @elseif ($order->discount_description)
                     <p class="mb-0">{{ $order->discount_description }}</p>
@@ -50,6 +51,27 @@
                 </x-core::table.body.cell>
                 <x-core::table.body.cell>
                     {{ format_price($order->tax_amount) }}
+                </x-core::table.body.cell>
+            </x-core::table.body.row>
+        @endif
+        @if ((float) ($order->shipping_tax_amount ?? 0))
+            <x-core::table.body.row>
+                <x-core::table.body.cell>
+                    {{ trans('plugins/ecommerce::order.shipping_tax') }}
+                </x-core::table.body.cell>
+                <x-core::table.body.cell>
+                    {{ format_price($order->shipping_tax_amount) }}
+                </x-core::table.body.cell>
+            </x-core::table.body.row>
+        @endif
+
+        @if ((float) $order->payment_fee)
+            <x-core::table.body.row>
+                <x-core::table.body.cell>
+                    {{ trans('plugins/payment::payment.payment_fee') }}
+                </x-core::table.body.cell>
+                <x-core::table.body.cell>
+                    {{ format_price($order->payment_fee) }}
                 </x-core::table.body.cell>
             </x-core::table.body.row>
         @endif
@@ -93,12 +115,12 @@
                 <x-core::table.body.cell>
                     @if ($isInAdmin && $order->payment->id)
                         <a href="{{ route('payment.show', $order->payment->id) }}" target="_blank">
-                            {{ $order->payment->payment_channel->label() }}
+                            {{ $order->payment->payment_channel->displayName() }}
 
                             <x-core::icon name="ti ti-external-link" />
                         </a>
                     @else
-                        {{ $order->payment->payment_channel->label() }}
+                        {{ $order->payment->payment_channel->displayName() }}
                     @endif
                 </x-core::table.body.cell>
             </x-core::table.body.row>
@@ -113,16 +135,13 @@
             </x-core::table.body.row>
         @endif
 
-        @if($isInAdmin)
+        @if(!empty($proofDownloadUrl))
             @if ($order->proof_file && Storage::disk('local')->exists($order->proof_file))
                 <x-core::table.body.row>
-                    <x-core::table.body.cell>
-                        {{ trans('plugins/ecommerce::order.payment_proof') }}
-                    </x-core::table.body.cell>
-                    <x-core::table.body.cell>
-                        <a href="{{ route('orders.download-proof', $order->id) }}" target="_blank">
-                            {{ $order->proof_file }}
-                        </a>
+                    <x-core::table.body.cell colspan="2">
+                        <div style="margin-top: -1rem !important">
+                            @include('plugins/ecommerce::orders.partials.payment-proof-detail', ['downloadUrl' => $proofDownloadUrl])
+                        </div>
                     </x-core::table.body.cell>
                 </x-core::table.body.row>
             @endif

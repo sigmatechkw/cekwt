@@ -13,9 +13,17 @@ Theme::registerRoutes(function (): void {
         ->name('public.')
         ->group(function (): void {
             Route::get('/', 'index')->name('cart');
+            Route::get('add/{product}', 'addByUrl')->name('cart.add-by-url');
             Route::post('add-to-cart', 'store')->name('cart.add-to-cart');
             Route::post('update', 'update')->name('cart.update');
             Route::get('remove/{id}', 'destroy')->name('cart.remove');
             Route::get('destroy', 'empty')->name('cart.destroy');
+        });
+
+    Route::controller(PublicCartController::class)
+        ->prefix('abandoned-cart')
+        ->name('public.abandoned-cart.')
+        ->group(function (): void {
+            Route::get('unsubscribe/{token}', 'unsubscribe')->name('unsubscribe');
         });
 });

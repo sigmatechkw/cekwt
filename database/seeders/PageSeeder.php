@@ -145,14 +145,11 @@ class PageSeeder extends BaseSeeder
             ],
             [
                 'name' => 'FAQs',
-                'content' => '[faqs category_ids="1,2,3"][/faqs]' .
-                    'Get in touch' .
-                    '<p>&nbsp;</p>
-                    <p>&nbsp;</p>
-                    <p><span style="font-size:24px;"><strong>Get in touch</strong></span></p>' .
-                    '[contact-form][/contact-form]',
+                'content' => '[faqs category_ids="1,2,3"][/faqs]',
             ],
         ];
+
+        $this->truncatePages();
 
         $this->createPages($pages);
     }

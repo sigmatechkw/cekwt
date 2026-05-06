@@ -14,6 +14,8 @@ class CheckoutOrderData
         public float $couponDiscountAmount,
         public ?string $defaultShippingMethod = null,
         public ?string $defaultShippingOption = null,
+        public float $paymentFee = 0,
+        public float $shippingTaxAmount = 0,
     ) {
     }
 }

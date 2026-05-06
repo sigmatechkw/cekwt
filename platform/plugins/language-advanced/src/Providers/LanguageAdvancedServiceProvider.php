@@ -6,6 +6,8 @@ use Botble\Base\Supports\ServiceProvider;
 use Botble\Base\Traits\LoadAndPublishDataTrait;
 use Botble\Language\Facades\Language;
 use Botble\Language\Models\Language as LanguageModel;
+use Botble\LanguageAdvanced\Exporters\TranslationExporterManager;
+use Botble\LanguageAdvanced\Importers\TranslationImporterManager;
 use Botble\LanguageAdvanced\Supports\LanguageAdvancedManager;
 use Botble\Page\Models\Page;
 use Botble\Setting\Facades\Setting;
@@ -17,6 +19,17 @@ use Illuminate\Support\Facades\Route;
 class LanguageAdvancedServiceProvider extends ServiceProvider
 {
     use LoadAndPublishDataTrait;
+
+    public function register(): void
+    {
+        $this->app->singleton(TranslationImporterManager::class, function () {
+            return new TranslationImporterManager();
+        });
+
+        $this->app->singleton(TranslationExporterManager::class, function () {
+            return new TranslationExporterManager();
+        });
+    }
 
     public function boot(): void
     {
@@ -30,7 +43,9 @@ class LanguageAdvancedServiceProvider extends ServiceProvider
         $this
             ->loadHelpers()
             ->loadAndPublishConfigurations(['general'])
+            ->loadAndPublishConfigurations(['permissions'])
             ->loadAndPublishViews()
+            ->loadAndPublishTranslations()
             ->loadRoutes();
 
         $this->app->register(EventServiceProvider::class);
@@ -78,13 +93,23 @@ class LanguageAdvancedServiceProvider extends ServiceProvider
             }
         });
 
-        foreach (LanguageAdvancedManager::getSupported() as $model => $columns) {
-            $this->app['events']->listen('eloquent.deleted: ' . $model, function (Model $model): void {
-                DB::table($model->getTable() . '_translations')
-                    ->where($model->getTable() . '_id', $model->getKey())
-                    ->delete();
-            });
-        }
+        $this->app['events']->listen('eloquent.deleted: *', function (string $event, array $data): void {
+            $model = $data[0] ?? null;
+
+            if (! $model instanceof Model) {
+                return;
+            }
+
+            $supported = LanguageAdvancedManager::getSupported();
+
+            if (! isset($supported[get_class($model)])) {
+                return;
+            }
+
+            DB::table($model->getTable() . '_translations')
+                ->where($model->getTable() . '_id', $model->getKey())
+                ->delete();
+        });
     }
 
     public function getPermalinkSettingKey(string $key): string

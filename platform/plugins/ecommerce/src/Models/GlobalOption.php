@@ -14,6 +14,7 @@ class GlobalOption extends BaseModel
         'name',
         'option_type',
         'required',
+        'price_per_product',
     ];
 
     protected static function booted(): void
@@ -27,7 +28,7 @@ class GlobalOption extends BaseModel
     {
         return $this
             ->hasMany(GlobalOptionValue::class, 'option_id')
-            ->orderBy('order');
+            ->oldest('order');
     }
 
     protected function optionName(): Attribute

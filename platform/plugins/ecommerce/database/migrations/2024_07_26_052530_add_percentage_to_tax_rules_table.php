@@ -7,8 +7,12 @@ use Illuminate\Support\Facades\Schema;
 return new class () extends Migration {
     public function up(): void
     {
+        if (Schema::hasColumn('ec_tax_rules', 'percentage')) {
+            return;
+        }
+
         Schema::table('ec_tax_rules', function (Blueprint $table): void {
-            $table->float('percentage', 8, 6)->nullable();
+            $table->float('percentage', 8)->nullable();
         });
     }
 

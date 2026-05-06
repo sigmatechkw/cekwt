@@ -6,7 +6,9 @@ use Botble\Base\Events\CreatedContentEvent;
 use Botble\Base\Events\UpdatedContentEvent;
 use Botble\Base\Facades\BaseHelper;
 use Botble\Ecommerce\Enums\CrossSellPriceType;
+use Botble\Ecommerce\Enums\ProductLicenseCodeStatusEnum;
 use Botble\Ecommerce\Enums\ProductTypeEnum;
+use Botble\Ecommerce\Enums\UpSellPriceType;
 use Botble\Ecommerce\Events\ProductFileUpdatedEvent;
 use Botble\Ecommerce\Events\ProductQuantityUpdatedEvent;
 use Botble\Ecommerce\Facades\EcommerceHelper;
@@ -14,6 +16,8 @@ use Botble\Ecommerce\Models\Option;
 use Botble\Ecommerce\Models\OptionValue;
 use Botble\Ecommerce\Models\Product;
 use Botble\Ecommerce\Models\ProductFile;
+use Botble\Ecommerce\Models\ProductSpecificationAttributeTranslation;
+use Botble\Ecommerce\Models\SpecificationAttribute;
 use Botble\Media\Facades\RvMedia;
 use Botble\Media\Models\MediaFile;
 use Botble\Media\Services\UploadsManager;
@@ -33,10 +37,10 @@ class StoreProductService
     {
         $data = $request->input();
 
-        $hasVariation = $product->variations()->count() > 0;
+        $hasVariation = $product->has_variation;
 
         if ($hasVariation && ! $forceUpdateAll) {
-            $data = $request->except([
+            $excludedFields = [
                 'sku',
                 'quantity',
                 'allow_checkout_when_out_of_stock',
@@ -51,8 +55,14 @@ class StoreProductService
                 'wide',
                 'height',
                 'weight',
-                'generate_license_code',
-            ]);
+            ];
+
+            if (! $product->isTypeDigital()) {
+                $excludedFields[] = 'generate_license_code';
+                $excludedFields[] = 'license_code_type';
+            }
+
+            $data = $request->except($excludedFields);
         }
 
         if ($sku = $request->input('sku')) {
@@ -113,28 +123,64 @@ class StoreProductService
         }
 
         if ($request->has('up_sale_products')) {
+            $upSaleProducts = $request->input('up_sale_products', []);
             $product->upSales()->detach();
 
-            if ($upSaleProducts = $request->input('up_sale_products', '')) {
-                $product->upSales()->attach(array_filter(explode(',', $upSaleProducts)));
-            }
+            $upSaleProducts = array_map(function ($item) use ($upSaleProducts) {
+                unset($item['id']);
+
+                $item['is_variant'] = isset($item['is_variant']) && ($item['is_variant'] == '1' || $item['is_variant']);
+                $item['price'] = $item['price'] ?? 0;
+                $item['price_type'] = $item['price_type'] ?? UpSellPriceType::FIXED;
+
+                if (! $item['is_variant']) {
+                    $item['apply_to_all_variations'] = isset($item['apply_to_all_variations']) && $item['apply_to_all_variations'] == '1';
+                } else {
+                    $item['apply_to_all_variations'] = '0';
+
+                    $parentId = $item['parent_id'] ?? null;
+
+                    if ($parentId) {
+                        $item['price'] = $upSaleProducts[$parentId]['price'] ?? 0;
+                        $item['price_type'] = $upSaleProducts[$parentId]['price_type'] ?? UpSellPriceType::FIXED;
+                    }
+                }
+
+                unset($item['parent_id']);
+
+                return $item;
+            }, $upSaleProducts);
+
+            $product->upSales()->sync($upSaleProducts);
+        } else {
+            $product->upSales()->detach();
         }
 
         if ($request->has('cross_sale_products')) {
+            $crossSaleProducts = $request->input('cross_sale_products', []);
             $product->crossSales()->detach();
 
-            $crossSaleProducts = $request->input('cross_sale_products', []);
-
-            $crossSaleProducts = array_map(function ($item) {
+            $crossSaleProducts = array_map(function ($item) use ($crossSaleProducts) {
                 unset($item['id']);
 
-                $item['is_variant'] = isset($item['is_variant']) && $item['is_variant'] == '1';
+                $item['is_variant'] = isset($item['is_variant']) && ($item['is_variant'] == '1' || $item['is_variant']);
                 $item['price'] = $item['price'] ?? 0;
                 $item['price_type'] = $item['price_type'] ?? CrossSellPriceType::FIXED;
 
                 if (! $item['is_variant']) {
                     $item['apply_to_all_variations'] = isset($item['apply_to_all_variations']) && $item['apply_to_all_variations'] == '1';
+                } else {
+                    $item['apply_to_all_variations'] = '0';
+
+                    $parentId = $item['parent_id'] ?? null;
+
+                    if ($parentId) {
+                        $item['price'] = $crossSaleProducts[$parentId]['price'] ?? 0;
+                        $item['price_type'] = $crossSaleProducts[$parentId]['price_type'] ?? CrossSellPriceType::FIXED;
+                    }
                 }
+
+                unset($item['parent_id']);
 
                 return $item;
             }, $crossSaleProducts);
@@ -148,18 +194,54 @@ class StoreProductService
             $this->saveProductFiles($request, $product);
         }
 
+        $refLang = $request->input('ref_lang');
+
         if (EcommerceHelper::isEnabledProductOptions() && $request->input('has_product_options')) {
-            $this->saveProductOptions((array) $request->input('options', []), $product);
+            $this->saveProductOptions((array) $request->input('options', []), $product, $refLang);
         }
 
-        $specificationAttributes = $request->collect('specification_attributes')
-            ->mapWithKeys(fn ($item, $key) => [$key => [
-                'value' => $item['value'] ?? null,
-                'hidden' => $item['hidden'] ?? false,
-                'order' => $item['order'] ?? 0,
-            ]]);
+        $isDefaultLanguage = ProductSpecificationAttributeTranslation::isDefaultLanguage($refLang);
 
-        $product->specificationAttributes()->sync($specificationAttributes);
+        if ($isDefaultLanguage) {
+            $specificationAttributes = $request->collect('specification_attributes')
+                ->mapWithKeys(fn ($item, $key) => [$key => [
+                    'value' => $item['value'] ?? null,
+                    'hidden' => $item['hidden'] ?? false,
+                    'order' => $item['order'] ?? 0,
+                ]]);
+
+            $product->specificationAttributes()->sync($specificationAttributes);
+        } else {
+            $langCode = ProductSpecificationAttributeTranslation::getCurrentLanguageCode($refLang);
+            $specificationAttributes = $request->input('specification_attributes', []);
+
+            foreach ($specificationAttributes as $attributeId => $attributeData) {
+                if (isset($attributeData['value'])) {
+                    $attribute = SpecificationAttribute::query()->find($attributeId);
+
+                    if (! $attribute) {
+                        continue;
+                    }
+
+                    if ($attribute->hasOptions() && $attribute->hasIdBasedOptions()) {
+                        continue;
+                    }
+
+                    ProductSpecificationAttributeTranslation::query()->updateOrCreate(
+                        [
+                            'product_id' => $product->id,
+                            'attribute_id' => $attributeId,
+                            'lang_code' => $langCode,
+                        ],
+                        [
+                            'value' => $attributeData['value'],
+                        ]
+                    );
+                }
+            }
+        }
+
+        $this->saveLicenseCodes($request, $product);
 
         event(new ProductQuantityUpdatedEvent($product));
 
@@ -168,7 +250,9 @@ class StoreProductService
 
     public function saveProductFiles(Request $request, Product $product, bool $exists = true): Product
     {
-        /** @var Collection<ProductFile> $productFiles */
+        /**
+         * @var Collection<ProductFile> $productFiles
+         */
         $productFiles = collect();
 
         if ($exists) {
@@ -184,8 +268,8 @@ class StoreProductService
                     $productFiles->push(
                         $product->productFiles()->create($data)
                     );
-                } catch (Exception $ex) {
-                    info($ex);
+                } catch (Exception $exception) {
+                    info($exception->getMessage());
                 }
             }
         }
@@ -270,7 +354,19 @@ class StoreProductService
         ];
     }
 
-    protected function saveProductOptions(array $options, Product $product): void
+    protected function saveProductOptions(array $options, Product $product, ?string $refLang = null): void
+    {
+        $isDefaultLanguage = ProductSpecificationAttributeTranslation::isDefaultLanguage($refLang);
+
+        if ($isDefaultLanguage) {
+            $this->saveProductOptionsForDefaultLanguage($options, $product);
+        } else {
+            $langCode = ProductSpecificationAttributeTranslation::getCurrentLanguageCode($refLang);
+            $this->saveProductOptionsTranslations($options, $product, $langCode);
+        }
+    }
+
+    protected function saveProductOptionsForDefaultLanguage(array $options, Product $product): void
     {
         $optionIds = [];
 
@@ -286,24 +382,37 @@ class StoreProductService
                 }
 
                 $opt['required'] = isset($opt['required']) && $opt['required'] == 1;
+                $opt['price_per_product'] = isset($opt['price_per_product']) && $opt['price_per_product'] == 1;
                 $option->fill($opt);
                 $option->product_id = $product->getKey();
                 $option->save();
-                $option->values()->delete();
+
+                $valueIds = [];
 
                 if (! empty($opt['values'])) {
-                    $optionValues = [];
                     foreach ($opt['values'] as $value) {
-                        $optionValue = new OptionValue();
+                        $valueId = $value['id'] ?? null;
+                        $optionValue = $valueId ? $option->values()->find($valueId) : null;
+
+                        if (! $optionValue) {
+                            $optionValue = new OptionValue();
+                            $optionValue->option_id = $option->id;
+                        }
+
                         if (! isset($value['option_value'])) {
                             $value['option_value'] = '';
                         }
-                        $optionValue->fill($value);
-                        $optionValues[] = $optionValue;
-                    }
 
-                    $option->values()->saveMany($optionValues);
+                        $optionValue->fill($value);
+                        $optionValue->save();
+
+                        $valueIds[] = $optionValue->id;
+                    }
                 }
+
+                $option->values()->whereNotIn('id', $valueIds)->get()->each(function (OptionValue $deletedValue): void {
+                    $deletedValue->delete();
+                });
 
                 $optionIds[] = $option->getKey();
             }
@@ -313,6 +422,94 @@ class StoreProductService
             });
         } catch (Exception $exception) {
             info($exception->getMessage());
+        }
+    }
+
+    protected function saveProductOptionsTranslations(array $options, Product $product, string $langCode): void
+    {
+        try {
+            foreach ($options as $opt) {
+                $optionId = $opt['id'] ?? null;
+
+                if (! $optionId) {
+                    continue;
+                }
+
+                /**
+                 * @var Option|null $option
+                 */
+                $option = $product->options()->find($optionId);
+
+                if (! $option) {
+                    continue;
+                }
+
+                if (isset($opt['name'])) {
+                    $option->saveTranslation($langCode, $opt['name']);
+                }
+
+                if (! empty($opt['values'])) {
+                    $existingValues = $option->values()->get()->keyBy('id');
+
+                    foreach ($opt['values'] as $value) {
+                        $valueId = $value['id'] ?? null;
+
+                        if (! $valueId) {
+                            continue;
+                        }
+
+                        $optionValue = $existingValues->get($valueId);
+
+                        if ($optionValue && isset($value['option_value'])) {
+                            $optionValue->saveTranslation($langCode, $value['option_value']);
+                        }
+                    }
+                }
+            }
+        } catch (Exception $exception) {
+            info($exception->getMessage());
+        }
+    }
+
+    public function saveLicenseCodes(Request $request, Product $product): void
+    {
+        // Only save license codes for digital products with license code generation enabled
+        if (! $product->isTypeDigital() || ! $product->generate_license_code) {
+            return;
+        }
+
+        // License codes can now be saved for both main products and variations
+
+        $licenseCodes = $request->input('license_codes', []);
+
+        foreach ($licenseCodes as $id => $licenseCodeData) {
+            if (isset($licenseCodeData['_delete'])) {
+                // Delete existing license code
+                if (is_numeric($id)) {
+                    $product->licenseCodes()->where('id', $id)->where('status', ProductLicenseCodeStatusEnum::AVAILABLE)->delete();
+                }
+
+                continue;
+            }
+
+            $code = trim($licenseCodeData['code'] ?? '');
+            if (empty($code)) {
+                continue;
+            }
+
+            if (str_starts_with($id, 'new_')) {
+                // Create new license code
+                $product->licenseCodes()->create([
+                    'license_code' => $code,
+                    'status' => ProductLicenseCodeStatusEnum::AVAILABLE,
+                ]);
+            } else {
+                // Update existing license code (only if it's available)
+                $product->licenseCodes()
+                    ->where('id', $id)
+                    ->where('status', ProductLicenseCodeStatusEnum::AVAILABLE)
+                    ->update(['license_code' => $code]);
+            }
         }
     }
 }

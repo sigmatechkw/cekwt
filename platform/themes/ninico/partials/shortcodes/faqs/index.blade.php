@@ -1,5 +1,6 @@
 <section>
     @foreach($categories as $key => $category)
+        @continue($category->faqs->isEmpty())
         <div class="pt-30 pb-30">
             <div class="mb-30">
                 <div class="mb-20">

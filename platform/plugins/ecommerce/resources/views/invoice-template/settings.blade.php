@@ -35,6 +35,20 @@
                 >
                 </x-core::twig-editor>
             </x-core::form-group>
+
+            <x-core::form-group>
+                <x-core::form.label for="invoice_template_custom_css">
+                    {{ trans('plugins/ecommerce::invoice-template.custom_css') }}
+                </x-core::form.label>
+                <x-core::form.code-editor
+                    name="invoice_template_custom_css"
+                    mode="css"
+                    :value="setting('invoice_template_custom_css')"
+                />
+                <x-core::form.helper-text>
+                    {{ trans('plugins/ecommerce::invoice-template.custom_css_helper') }}
+                </x-core::form.helper-text>
+            </x-core::form-group>
         </x-core-setting::section>
 
         <x-core-setting::section.action>
@@ -76,6 +90,6 @@
         :submit-button-label="trans('plugins/ecommerce::invoice-template.continue')"
         :submit-button-attrs="['id' => 'reset-template-to-default-button', 'data-target' => route('ecommerce.settings.invoice-template.reset', $currentTemplate)]"
     >
-        {!! trans('plugins/ecommerce::invoice-template.confirm_message') !!}
+        {!! BaseHelper::clean(trans('plugins/ecommerce::invoice-template.confirm_message')) !!}
     </x-core::modal.action>
 @endsection

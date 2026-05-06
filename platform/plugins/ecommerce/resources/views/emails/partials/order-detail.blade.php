@@ -1,9 +1,9 @@
 @if (!$order->dont_show_order_info_in_product_list)
     <a
         class="button button-blue"
-        href="{{ route('public.orders.tracking', ['order_id' => $order->code, 'email' => $order->user->email ?: $order->address->email]) }}"
+        href="{{ $order->getOrderTrackingUrl() }}"
     >{{ trans('plugins/ecommerce::email.view_order') }}</a>
-    {!! trans('plugins/ecommerce::email.link_go_to_our_shop', ['link' => BaseHelper::getHomepageUrl()]) !!}
+    {!! BaseHelper::clean(trans('plugins/ecommerce::email.link_go_to_our_shop', ['link' => BaseHelper::getHomepageUrl()])) !!}
 
     <br />
 @endif
@@ -62,10 +62,24 @@
                 </tr>
             @endif
 
+            @if ((float) ($order->shipping_tax_amount ?? 0))
+                <tr>
+                    <td colspan="2" class="bb-text-right">{{ trans('plugins/ecommerce::order.shipping_tax') }}</td>
+                    <td colspan="2" class="bb-text-right">{{ format_price($order->shipping_tax_amount) }}</td>
+                </tr>
+            @endif
+
             @if ((float)$order->discount_amount)
                 <tr>
                     <td colspan="2" class="bb-text-right">{{ trans('plugins/ecommerce::products.form.discount') }}</td>
                     <td colspan="2" class="bb-text-right">{{ format_price($order->discount_amount) }}</td>
+                </tr>
+            @endif
+
+            @if ((float)$order->payment_fee)
+                <tr>
+                    <td colspan="2" class="bb-text-right">{{ trans('plugins/payment::payment.payment_fee') }}</td>
+                    <td colspan="2" class="bb-text-right">{{ format_price($order->payment_fee) }}</td>
                 </tr>
             @endif
             <tr>

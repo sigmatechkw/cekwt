@@ -7,14 +7,14 @@ export class DownloadService {
         this.MediaService = new MediaService()
 
         $(document).on('shown.bs.modal', '#modal_download_url', (event) => {
-            $(event.currentTarget).find('.form-download-url input[type=text]').focus()
+            $(event.currentTarget).find('.form-download-url textarea[name="urls"]').trigger('focus')
         })
     }
 
     async download(urls, onProgress, onCompleted) {
         let _self = this
 
-        urls = $.trim(urls).split(/\r?\n/)
+        urls = urls.trim().split(/\r?\n/)
 
         let index = 0
         let hasError = false

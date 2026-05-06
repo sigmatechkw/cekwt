@@ -1,6 +1,9 @@
 <?php
 
-app()->booted(function (): void {
+use Botble\Theme\ThemeOption\Fields\ColorField;
+use Botble\Theme\Events\RenderingThemeOptionSettings;
+
+app('events')->listen(RenderingThemeOptionSettings::class, function (): void {
     theme_option()
         ->setSection([
             'title' => __('Styles'),
@@ -104,6 +107,22 @@ app()->booted(function (): void {
                         'value' => '#ededed',
                     ],
                 ],
+                ColorField::make()
+                    ->name('header_background_color')
+                    ->label(__('Header background color'))
+                    ->defaultValue('#fff'),
+                ColorField::make()
+                    ->name('header_text_color')
+                    ->label(__('Header text color'))
+                    ->defaultValue('#040404'),
+                ColorField::make()
+                    ->name('header_menu_text_color')
+                    ->label(__('Header menu text color'))
+                    ->defaultValue('#040404'),
+                ColorField::make()
+                    ->name('header_menu_text_hover_color')
+                    ->label(__('Header menu text hover color'))
+                    ->defaultValue('#d51243'),
             ],
         ])
         ->setField([
@@ -184,59 +203,6 @@ app()->booted(function (): void {
                 'value' => '908. 408. 501. 89',
                 'options' => [
                     'class' => 'form-control',
-                ],
-            ],
-        ])
-        ->setSection([
-            'title' => __('Social Links'),
-            'desc' => __('Social Links at the footer.'),
-            'id' => 'opt-text-subsection-social-links',
-            'subsection' => true,
-            'icon' => 'ti ti-social',
-            'fields' => [
-                [
-                    'id' => 'social_links',
-                    'type' => 'repeater',
-                    'label' => __('Social Links'),
-                    'attributes' => [
-                        'name' => 'social_links',
-                        'value' => null,
-                        'fields' => [
-                            [
-                                'type' => 'text',
-                                'label' => __('Name'),
-                                'attributes' => [
-                                    'name' => 'name',
-                                    'value' => null,
-                                    'options' => [
-                                        'class' => 'form-control',
-                                    ],
-                                ],
-                            ],
-                            [
-                                'type' => 'themeIcon',
-                                'label' => __('Icon'),
-                                'attributes' => [
-                                    'name' => 'icon',
-                                    'value' => null,
-                                    'options' => [
-                                        'class' => 'form-control',
-                                    ],
-                                ],
-                            ],
-                            [
-                                'type' => 'text',
-                                'label' => __('URL'),
-                                'attributes' => [
-                                    'name' => 'url',
-                                    'value' => null,
-                                    'options' => [
-                                        'class' => 'form-control',
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
                 ],
             ],
         ])
@@ -437,6 +403,23 @@ app()->booted(function (): void {
                     2 => 2,
                 ],
                 'value' => 2,
+                'options' => [
+                    'class' => 'form-control',
+                ],
+            ],
+        ])
+        ->setField([
+            'id' => 'enable_quick_view',
+            'section_id' => 'opt-text-subsection-ecommerce',
+            'type' => 'customSelect',
+            'label' => __('Enable quick view button?'),
+            'attributes' => [
+                'name' => 'enable_quick_view',
+                'list' => [
+                    'yes' => __('Yes'),
+                    'no' => __('No'),
+                ],
+                'value' => 'yes',
                 'options' => [
                     'class' => 'form-control',
                 ],

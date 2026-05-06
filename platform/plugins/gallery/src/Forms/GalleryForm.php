@@ -2,7 +2,7 @@
 
 namespace Botble\Gallery\Forms;
 
-use Botble\Base\Forms\FieldOptions\EditorFieldOption;
+use Botble\Base\Forms\FieldOptions\DescriptionFieldOption;
 use Botble\Base\Forms\FieldOptions\IsFeaturedFieldOption;
 use Botble\Base\Forms\FieldOptions\MediaImageFieldOption;
 use Botble\Base\Forms\FieldOptions\NameFieldOption;
@@ -26,7 +26,12 @@ class GalleryForm extends FormAbstract
             ->model(Gallery::class)
             ->setValidatorClass(GalleryRequest::class)
             ->add('name', TextField::class, NameFieldOption::make()->required())
-            ->add('description', EditorField::class, EditorFieldOption::make()->required())
+            ->add(
+                'description',
+                EditorField::class,
+                DescriptionFieldOption::make()
+                    ->required()
+            )
             ->add('order', NumberField::class, SortOrderFieldOption::make())
             ->add(
                 'is_featured',

@@ -1,6 +1,10 @@
 @if($announcements->isNotEmpty())
     <div
-        @class(['ae-anno-announcement-wrapper', 'hide-on-mobile' => \ArchiElite\Announcement\AnnouncementHelper::isHideOnMobile()])
+        @class([
+            'ae-anno-announcement-wrapper',
+            'hide-on-mobile' => \ArchiElite\Announcement\AnnouncementHelper::isHideOnMobile(),
+            'ae-anno-announcement--dismissible' => setting('announcement_dismissible', false),
+        ])
         style="
             --background-color: {{ setting('announcement_background_color', theme_option('primary_color', '#000')) }};
             --text-color: {{ setting('announcement_text_color', '#fff') }};

@@ -10,7 +10,9 @@ use Botble\Base\Models\BaseModel;
 use Botble\Base\Traits\HasTreeCategory;
 use Botble\Ecommerce\Tables\ProductTable;
 use Botble\Media\Facades\RvMedia;
+use Botble\Slug\Facades\SlugHelper;
 use Botble\Support\Services\Cache\Cache;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,11 +40,43 @@ class ProductCategory extends BaseModel implements HasTreeCategoryContract
         'is_featured',
         'icon',
         'icon_image',
+        'slug',
     ];
 
     protected $casts = [
         'status' => BaseStatusEnum::class,
+        'is_featured' => 'bool',
+        'order' => 'int',
     ];
+
+    protected function url(): Attribute
+    {
+        return Attribute::get(function (): string {
+            if (! $this->slug && $this->slugable) {
+                $this->slug = $this->slugable->key;
+            }
+
+            $slug = $this->slug;
+
+            if (! $slug && $this->slugable) {
+                $slug = $this->slugable->key;
+                $this->slug = $slug;
+            }
+
+            if (! $slug) {
+                return BaseHelper::getHomepageUrl();
+            }
+
+            $prefix = SlugHelper::getPrefix(ProductCategory::class);
+
+            $prefix = apply_filters(FILTER_SLUG_PREFIX, $prefix);
+
+            return apply_filters(
+                'slug_filter_url',
+                url(ltrim($prefix . '/' . $slug, '/')) . SlugHelper::getPublicSingleEndingURL()
+            );
+        });
+    }
 
     protected static function booted(): void
     {
@@ -55,12 +89,16 @@ class ProductCategory extends BaseModel implements HasTreeCategoryContract
             $category->productAttributeSets()->detach();
         });
 
-        static::saved(function (): void {
+        static::saved(function (ProductCategory $category): void {
             Cache::make(static::class)->flush();
+
+            $category->clearParentCache();
         });
 
-        static::deleted(function (): void {
+        static::deleted(function (ProductCategory $category): void {
             Cache::make(static::class)->flush();
+
+            $category->clearParentCache();
         });
     }
 
@@ -115,30 +153,111 @@ class ProductCategory extends BaseModel implements HasTreeCategoryContract
         return Attribute::get(function (): Collection {
             $parents = collect();
 
-            $parent = $this->parent;
-
-            while ($parent->id) {
-                $parents->push($parent);
-                $parent = $parent->parent;
+            if (! $this->parent_id) {
+                return $parents;
             }
 
-            return $parents;
+            $cacheKey = 'product_category_parents_' . $this->id;
+
+            return cache()->remember($cacheKey, 3600, function () {
+                return $this->loadParentsRecursively();
+            });
         });
+    }
+
+    protected function loadParentsRecursively(): Collection
+    {
+        $parents = collect();
+        $parentIds = [];
+        $currentParentId = $this->parent_id;
+
+        $maxDepth = 10;
+        while ($currentParentId && $maxDepth > 0) {
+            if (in_array($currentParentId, $parentIds)) {
+                break;
+            }
+            $parentIds[] = $currentParentId;
+            $maxDepth--;
+
+            $nextParent = DB::table('ec_product_categories')
+                ->where('id', $currentParentId)
+                ->select('parent_id')
+                ->first();
+
+            $currentParentId = $nextParent?->parent_id;
+        }
+
+        if (! empty($parentIds)) {
+            $allParents = ProductCategory::query()
+                ->whereIn('id', $parentIds)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($parentIds as $parentId) {
+                if ($allParents->has($parentId)) {
+                    $parents->push($allParents->get($parentId));
+                }
+            }
+        }
+
+        return $parents;
+    }
+
+    public function clearParentCache(): void
+    {
+        cache()->forget('product_category_parents_' . $this->id);
+
+        $childIds = $this->children()->pluck('id')->all();
+        foreach ($childIds as $childId) {
+            cache()->forget('product_category_parents_' . $childId);
+        }
+    }
+
+    public static function withAllParents($categories): void
+    {
+        if ($categories->isEmpty()) {
+            return;
+        }
+
+        $allParentIds = [];
+        foreach ($categories as $category) {
+            if ($category->parent_id) {
+                $allParentIds[] = $category->parent_id;
+            }
+        }
+
+        if (empty($allParentIds)) {
+            return;
+        }
+
+        $loadedIds = [];
+        $maxDepth = 10;
+
+        while (! empty($allParentIds) && $maxDepth > 0) {
+            $allParentIds = array_unique(array_diff($allParentIds, $loadedIds));
+
+            if (empty($allParentIds)) {
+                break;
+            }
+
+            $parents = static::query()
+                ->whereIn('id', $allParentIds)
+                ->get();
+
+            foreach ($parents as $parent) {
+                cache()->put('product_category_' . $parent->id, $parent, 3600);
+                $loadedIds[] = $parent->id;
+            }
+
+            $allParentIds = $parents->pluck('parent_id')->filter()->toArray();
+            $maxDepth--;
+        }
     }
 
     protected function badgeWithCount(): Attribute
     {
         return Attribute::get(function (): HtmlString {
-            $categoryIds = static::getChildrenIds($this->activeChildren);
-
-            if (empty($categoryIds)) {
-                $categoryIds = [$this->getKey()];
-            }
-
-            $productsCount = DB::table('ec_product_category_product')
-                ->whereIn('category_id', $categoryIds)
-                ->distinct('product_id')
-                ->count();
+            $productsCount = $this->count_all_products;
 
             $link = route('products.index', [
                 'filter_table_id' => strtolower(Str::slug(Str::snake(ProductTable::class))),
@@ -148,12 +267,40 @@ class ProductCategory extends BaseModel implements HasTreeCategoryContract
                 'filter_values' => [$this->getKey()],
             ]);
 
-            return Html::link($link, sprintf('(%s)', $productsCount), [
+            return Html::link($link, sprintf('(%d)', $productsCount), [
                 'data-bs-toggle' => 'tooltip',
                 'data-bs-original-title' => trans('plugins/ecommerce::product-categories.total_products', ['total' => $productsCount]),
                 'target' => '_blank',
             ]);
-        })->shouldCache();
+        });
+    }
+
+    protected function countAllProducts(): Attribute
+    {
+        return Attribute::get(function (): int {
+            $cache = Cache::make(static::class);
+            $cacheKey = 'count_all_products_' . $this->getKey() . app()->getLocale();
+
+            if ($cache->has($cacheKey)) {
+                return $cache->get($cacheKey);
+            }
+
+            $categoryIds = static::getChildrenIds($this->activeChildren);
+
+            $categoryIds[] = $this->getKey();
+
+            $count = DB::table('ec_product_category_product')
+                ->join('ec_products', 'ec_product_category_product.product_id', '=', 'ec_products.id')
+                ->whereIn('category_id', $categoryIds)
+                ->where('ec_products.status', BaseStatusEnum::PUBLISHED)
+                ->where('ec_products.is_variation', 0)
+                ->distinct('product_id')
+                ->count();
+
+            $cache->put($cacheKey, $count, Carbon::now()->addHours(2));
+
+            return $count;
+        });
     }
 
     protected function iconHtml(): Attribute
@@ -179,7 +326,7 @@ class ProductCategory extends BaseModel implements HasTreeCategoryContract
 
         foreach ($children as $item) {
             $categoryIds[] = $item->id;
-            if ($item->children->isNotEmpty()) {
+            if ($item->activeChildren->isNotEmpty()) {
                 $categoryIds = static::getChildrenIds($item->activeChildren, $categoryIds);
             }
         }

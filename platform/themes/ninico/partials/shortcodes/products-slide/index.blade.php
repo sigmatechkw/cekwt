@@ -27,13 +27,13 @@
                             </div>
                             <div class="mt-3 whiteproduct__content d-flex justify-content-between align-items-center">
                                 <div class="whiteproduct__text text-truncate">
-                                    <h5 class="whiteproduct__title">
+                                    <h5 class="whiteproduct__title text-truncate">
                                         <a href="{{ $product->url }}">{{ $product->name }}</a>
                                     </h5>
-                                    <span>{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                                    @if($product->isOnSale())
-                                        <span class="tpproduct__priceinfo-list-oldprice">{{ format_price($product->price_with_taxes) }}</span>
-                                    @endif
+                                    @include(EcommerceHelper::viewPath('includes.product-price'), [
+                                        'product' => $product,
+                                        'priceOriginalClassName' => 'tpproduct__priceinfo-list-oldprice',
+                                    ])
                                 </div>
                                 @if (EcommerceHelper::isReviewEnabled())
                                     <div class="tpproduct-details__rating">

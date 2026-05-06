@@ -124,6 +124,50 @@ AdminHelper::registerRoutes(function (): void {
                 'uses' => 'ProductController@setDefaultProductVariation',
                 'permission' => 'products.edit',
             ])->wherePrimaryKey();
+
+            Route::get('view/{product}', [
+                'as' => 'view',
+                'uses' => 'ProductController@view',
+                'permission' => 'products.index',
+            ])->wherePrimaryKey('product');
+
+            Route::group(['prefix' => '{product}/license-codes', 'as' => 'license-codes.'], function (): void {
+                Route::get('/', [
+                    'as' => 'index',
+                    'uses' => 'ProductLicenseCodeController@index',
+                    'permission' => 'products.edit',
+                ]);
+
+                Route::post('/', [
+                    'as' => 'store',
+                    'uses' => 'ProductLicenseCodeController@store',
+                    'permission' => 'products.edit',
+                ]);
+
+                Route::post('bulk-generate', [
+                    'as' => 'bulk-generate',
+                    'uses' => 'ProductLicenseCodeController@bulkGenerate',
+                    'permission' => 'products.edit',
+                ]);
+
+                Route::delete('bulk-delete', [
+                    'as' => 'bulk-delete',
+                    'uses' => 'ProductLicenseCodeController@bulkDelete',
+                    'permission' => 'products.edit',
+                ]);
+
+                Route::put('{licenseCode}', [
+                    'as' => 'update',
+                    'uses' => 'ProductLicenseCodeController@update',
+                    'permission' => 'products.edit',
+                ]);
+
+                Route::delete('{licenseCode}', [
+                    'as' => 'destroy',
+                    'uses' => 'ProductLicenseCodeController@destroy',
+                    'permission' => 'products.edit',
+                ]);
+            });
         });
     });
 

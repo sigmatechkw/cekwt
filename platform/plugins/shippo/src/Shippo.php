@@ -85,21 +85,21 @@ class Shippo
         $this->currency = get_application_currency()->title;
 
         $this->statuses = [
-            'PRE_TRANSIT' => __('Shipping Label Created'),
-            'TRANSIT' => __('In Transit'),
-            'DELIVERED' => __('Delivered'),
-            'RETURNED' => __('Returned to Sender'),
-            'FAILURE' => __('Exception'),
-            'UNKNOWN' => __('Shipping Label Created'),
+            'PRE_TRANSIT' => trans('plugins/shippo::shippo.status.shipping_label_created'),
+            'TRANSIT' => trans('plugins/shippo::shippo.status.in_transit'),
+            'DELIVERED' => trans('plugins/shippo::shippo.status.delivered'),
+            'RETURNED' => trans('plugins/shippo::shippo.status.returned_to_sender'),
+            'FAILURE' => trans('plugins/shippo::shippo.status.exception'),
+            'UNKNOWN' => trans('plugins/shippo::shippo.status.shipping_label_created'),
         ];
 
         $this->contentTypes = [
-            'MERCHANDISE' => __('Merchandise'),
-            'DOCUMENTS' => __('Documents'),
-            'GIFT' => __('Gift'),
-            'RETURN_MERCHANDISE' => __('Returned Goods'),
-            'HUMANITARIAN_DONATION' => __('Humanitarian Donation'),
-            'OTHER' => __('Other'),
+            'MERCHANDISE' => trans('plugins/shippo::shippo.content_type.merchandise'),
+            'DOCUMENTS' => trans('plugins/shippo::shippo.content_type.documents'),
+            'GIFT' => trans('plugins/shippo::shippo.content_type.gift'),
+            'RETURN_MERCHANDISE' => trans('plugins/shippo::shippo.content_type.returned_goods'),
+            'HUMANITARIAN_DONATION' => trans('plugins/shippo::shippo.content_type.humanitarian_donation'),
+            'OTHER' => trans('plugins/shippo::shippo.content_type.other'),
         ];
 
         $this->insurance = false;
@@ -108,8 +108,8 @@ class Shippo
         $this->defaultTariff = '';
         $this->origin = $this->mergeAddress(EcommerceHelper::getOriginAddress());
 
-        $this->distanceUnit = ecommerce_width_height_unit();
-        $this->massUnit = ecommerce_weight_unit();
+        $this->distanceUnit = 'cm';
+        $this->massUnit = 'g';
 
         $this->packageTypes = config('plugins.shippo.general.package_types', []);
         $this->serviceLevels = config('plugins.shippo.general.service_levels', []);
@@ -189,7 +189,7 @@ class Shippo
             if ($rates = Arr::get($suggestResponse, 'shipment.rates', [])) {
                 foreach ($rates as &$rate) {
                     $rate['disabled'] = true;
-                    $rate['error_message'] = __('Not available in COD payment option.');
+                    $rate['error_message'] = trans('plugins/shippo::shippo.not_available_cod');
                 }
 
                 Arr::set($newResponse, 'shipment.rates', $rates);
@@ -446,15 +446,21 @@ class Shippo
         $height = 0;
 
         foreach (Arr::get($inParams, 'items', []) as $item) {
-            $_length = $item['length'] * $item['qty'];
-            $_height = $item['height'] * $item['qty'];
-            $length = max($length, $_length);
-            $height = $height > $_height ? $length : $_height;
-            $width += $item['wide'] * $item['qty'];
+            $length = max($length, $item['length']);
+            $width = max($width, $item['wide']);
+            $height += $item['height'] * $item['qty'];
         }
 
+        $width = ecommerce_convert_width_height($width);
+        $length = ecommerce_convert_width_height($length);
+        $height = ecommerce_convert_width_height($height);
+
+        $weight = round(EcommerceHelper::validateOrderWeight(Arr::get($inParams, 'weight', 0)), 2);
+
+        $weight = ecommerce_convert_weight($weight);
+
         $parcel = [
-            'weight' => round(EcommerceHelper::validateOrderWeight(Arr::get($inParams, 'weight', 0)), 2) ?: 200,
+            'weight' => $weight ?: 200,
             'length' => round($length, 2) ?: 10,
             'width' => round($width, 2) ?: 10,
             'height' => round($height, 2) ?: 10,
@@ -522,7 +528,7 @@ class Shippo
     protected function beforePrepareAddress(array $addr): array
     {
         if (EcommerceHelper::loadCountriesStatesCitiesFromPluginLocation()) {
-            $cityId = $addr['city'];
+            $cityId = $addr['city'] ?? null;
             if (! EcommerceHelper::useCityFieldAsTextField()) {
                 if (! is_numeric($cityId)) {
                     $city = City::query()->where('name', $cityId)->first();
@@ -533,7 +539,7 @@ class Shippo
                     }
                 }
             } else {
-                if (! is_numeric($addr['state'])) {
+                if (! empty($addr['state']) && ! is_numeric($addr['state'])) {
                     $state = State::query()->where('name', $addr['state'])->first();
                     if ($state) {
                         $addr['state'] = $state->id;
@@ -549,7 +555,7 @@ class Shippo
     protected function afterPrepareAddress(array $addr): array
     {
         if (EcommerceHelper::loadCountriesStatesCitiesFromPluginLocation()) {
-            $cityId = $addr['city'];
+            $cityId = $addr['city'] ?? null;
             if (! EcommerceHelper::useCityFieldAsTextField()) {
                 $city = Location::getCityById($cityId);
                 if ($city) {
@@ -558,7 +564,7 @@ class Shippo
                     $addr['country'] = $city->state->country->code;
                 }
             } else {
-                $state = State::query()->find($addr['state']);
+                $state = ! empty($addr['state']) ? State::query()->find($addr['state']) : null;
 
                 if ($state) {
                     $addr['state'] = $state->abbreviation ?: $state->name;
@@ -746,7 +752,7 @@ class Shippo
 
         if ($addressTo = Arr::get($response, 'address_to')) {
             if ($this->validateAddress && empty($addressTo['is_complete'])) {
-                $validationErrors['destination'][] = __('Address appears to be incomplete');
+                $validationErrors['destination'][] = trans('plugins/shippo::shippo.address_incomplete');
 
                 $this->log([__LINE__, 'Address is incomplete']);
             }

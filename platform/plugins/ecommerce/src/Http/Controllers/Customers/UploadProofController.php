@@ -4,6 +4,7 @@ namespace Botble\Ecommerce\Http\Controllers\Customers;
 
 use Botble\Base\Facades\EmailHandler;
 use Botble\Base\Http\Controllers\BaseController;
+use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Http\Requests\Fronts\UploadProofRequest;
 use Botble\Ecommerce\Models\Customer;
 use Botble\Ecommerce\Models\Order;
@@ -13,6 +14,13 @@ class UploadProofController extends BaseController
 {
     public function upload(int|string $id, UploadProofRequest $request)
     {
+        if (! EcommerceHelper::isPaymentProofEnabled()) {
+            return $this
+                ->httpResponse()
+                ->setError()
+                ->setMessage(__('Payment proof upload is currently disabled.'));
+        }
+
         /**
          * @var Customer $customer
          */
@@ -20,7 +28,21 @@ class UploadProofController extends BaseController
 
         $order = Order::query()
             ->where('user_id', $customer->getKey())
-            ->findOrFail($id);
+            ->find($id);
+
+        if (! $order) {
+            return $this
+                ->httpResponse()
+                ->setError()
+                ->setMessage(__('You do not have permission to upload payment proof for this order.'));
+        }
+
+        if (! $order->canBeCanceled()) {
+            return $this
+                ->httpResponse()
+                ->setError()
+                ->setMessage(__('This order cannot accept payment proof uploads at this time.'));
+        }
 
         $storage = Storage::disk('local');
 
@@ -53,7 +75,7 @@ class UploadProofController extends BaseController
 
         EmailHandler::setModule(ECOMMERCE_MODULE_SCREEN_NAME)
             ->setVariableValues($emailVariables)
-            ->sendUsingTemplate('payment-proof-upload-notification', args: [
+            ->sendUsingTemplate('payment-proof-upload-notification', EcommerceHelper::getAdminNotificationEmails(), [
                 'attachments' => [$storage->path($proofFilePath)],
             ]);
 
@@ -66,11 +88,17 @@ class UploadProofController extends BaseController
     {
         $order = Order::query()
             ->where('user_id', auth('customer')->id())
-            ->findOrFail($id);
+            ->find($id);
+
+        if (! $order) {
+            return redirect()->back()->with('error', __('You do not have permission to download payment proof for this order.'));
+        }
 
         $storage = Storage::disk('local');
 
-        abort_unless($storage->exists($order->proof_file), 404);
+        if (! $order->proof_file || ! $storage->exists($order->proof_file)) {
+            return redirect()->back()->with('error', __('Payment proof file not found.'));
+        }
 
         return $storage->download($order->proof_file);
     }

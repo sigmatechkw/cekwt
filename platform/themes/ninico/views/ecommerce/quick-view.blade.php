@@ -18,7 +18,7 @@
                 @foreach ($product->productLabels as $label)
                     <span
                         class="tpproduct-details__tag"
-                        style="color: {{ $label->color }};"
+                        {!! $label->css_styles !!}
                     >{{ $label->name }}</span>
                 @endforeach
                 @if (EcommerceHelper::isReviewEnabled())
@@ -40,22 +40,12 @@
                 <h3 class="tpproduct-details__title">
                     <a href="{{ $product->url }}">{!! BaseHelper::clean($product->name) !!}</a>
                 </h3>
-                @if (!$product->isOutOfStock())
-                    <span class="tpproduct-details__stock">{{ __('In Stock') }}</span>
-                @endif
+                <span class="tpproduct-details__stock mb-0">
+                    {!! $product->stock_status_html !!}
+                </span>
             </div>
-            <div class="tpproduct-details__price mb-10">
-                <span @class(['product-price-sale', 'd-none' => !$product->isOnSale()])>
-                    <span class="amount">{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                    <del class="amount">{{ format_price($product->price_with_taxes) }}</del>
-                </span>
-                <span @class([
-                    'product-price-original',
-                    'd-none' => $product->isOnSale(),
-                    'ms-0' => !$product->isOnSale(),
-                ])>
-                    <span @class(['amount', 'ms-0' => !$product->isOnSale()])>{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                </span>
+            <div class="tpproduct-details__price mb-10 mt-10">
+                @include(EcommerceHelper::viewPath('includes.product-price'), ['product' => $product])
             </div>
 
             {!! apply_filters('ecommerce_before_product_description', null, $product) !!}
@@ -123,7 +113,7 @@
                         <div class="tpproduct-details__wishlist">
                             <a
                                 class="wishlist add-to-wishlist"
-                                href="{{ route('public.wishlist.add', $product->getKey()) }}"
+                                href="#" data-url="{{ route('public.wishlist.add', $product->getKey()) }}"
                             >
                                 <i class="fal fa-heart"></i>
                             </a>

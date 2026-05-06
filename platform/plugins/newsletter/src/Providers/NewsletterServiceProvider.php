@@ -19,7 +19,6 @@ use Botble\Newsletter\Repositories\Interfaces\NewsletterInterface;
 use Botble\Setting\PanelSections\SettingOthersPanelSection;
 use Botble\Theme\FormFrontManager;
 use Illuminate\Contracts\Support\DeferrableProvider;
-use Illuminate\Routing\Events\RouteMatched;
 
 class NewsletterServiceProvider extends ServiceProvider implements DeferrableProvider
 {
@@ -41,7 +40,8 @@ class NewsletterServiceProvider extends ServiceProvider implements DeferrablePro
         $this
             ->setNamespace('plugins/newsletter')
             ->loadHelpers()
-            ->loadAndPublishConfigurations(['permissions', 'email'])
+            ->loadAndPublishConfigurations(['email'])
+            ->loadAndPublishConfigurations(['permissions'])
             ->loadAndPublishTranslations()
             ->loadRoutes()
             ->publishAssets()
@@ -74,11 +74,15 @@ class NewsletterServiceProvider extends ServiceProvider implements DeferrablePro
             );
         });
 
-        $this->app['events']->listen(RouteMatched::class, function (): void {
+        $this->app->booted(function (): void {
             EmailHandler::addTemplateSettings(NEWSLETTER_MODULE_SCREEN_NAME, config('plugins.newsletter.email', []));
         });
 
         FormFrontManager::register(NewsletterForm::class, NewsletterRequest::class);
+
+        add_filter(THEME_FRONT_FOOTER, function (?string $html): string {
+            return $html . view('plugins/newsletter::partials.gtm-script')->render();
+        }, 998);
     }
 
     public function provides(): array

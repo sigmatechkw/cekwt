@@ -100,13 +100,22 @@ class EmailHandler
             'css' => trans('core/base::base.email_template.email_css'),
             'date_time' => trans('core/base::base.email_template.date_time'),
             'date_year' => trans('core/base::base.email_template.date_year'),
+            'html_attributes' => trans('core/base::base.email_template.html_attributes'),
+            'body_attributes' => trans('core/base::base.email_template.body_attributes'),
         ];
     }
 
-    protected function getCoreVariableValues(): array
+    public function getCoreVariableValues(): array
     {
+        $language = Language::getCurrentLocale();
 
         return $this->coreVariableValues ??= [
+            'html_attributes' => trim(Html::attributes([
+                'lang' => $language['locale'],
+            ])),
+            'body_attributes' => trim(Html::attributes([
+                'dir' => $language['is_rtl'] ? 'rtl' : 'ltr',
+            ])),
             'now' => ($now = Carbon::now()),
             'header' => apply_filters(
                 BASE_FILTER_EMAIL_TEMPLATE_HEADER,
@@ -121,7 +130,7 @@ class EmailHandler
             'site_logo' => $this->getSiteLogo(),
             'date_time' => BaseHelper::formatDateTime($now),
             'date_year' => $now->year,
-            'site_email' => $siteEmail = setting('email_template_email_contact', get_admin_email()->first() ?: 'demo@example.com'),
+            'site_email' => $siteEmail = setting('email_template_email_contact', setting('email_from_address', get_admin_email()->first() ?: 'demo@example.com')),
             'site_admin_email' => $siteEmail,
             'site_copyright' => $this->getSiteCopyright(),
             'site_social_links' => $this->getSiteSocialLinks(),
@@ -326,7 +335,7 @@ class EmailHandler
         return $value;
     }
 
-    protected function replaceVariableValue(array $variables, string $module, string $content): string
+    protected function replaceVariableValue(array $variables, ?string $module, string $content): string
     {
         do_action('email_variable_value');
 
@@ -430,6 +439,9 @@ class EmailHandler
             $content = $this->prepareData($content);
             $title = $this->prepareData($title);
 
+            $content = $this->sanitizeUtf8($content);
+            $title = $this->sanitizeUtf8($title);
+
             event(new SendMailEvent($content, $title, $to, $args, $debug));
         } catch (Throwable $throwable) {
             if ($debug) {
@@ -531,5 +543,55 @@ class EmailHandler
     public function getSubject(): string
     {
         return $this->prepareData($this->getTemplateSubject($this->template, $this->type));
+    }
+
+    public function sendUsingTemplateWithLocale(
+        string $template,
+        string|array|null $email = null,
+        ?string $locale = null,
+        array $args = [],
+        bool $debug = false,
+        string $type = 'plugins',
+        $subject = null
+    ): bool {
+        if (! $locale) {
+            return $this->sendUsingTemplate($template, $email, $args, $debug, $type, $subject);
+        }
+
+        $previousLocale = app()->getLocale();
+
+        try {
+            app()->setLocale($locale);
+
+            unset($this->coreVariableValues);
+
+            $result = $this->sendUsingTemplate($template, $email, $args, $debug, $type, $subject);
+
+            return $result;
+        } finally {
+            app()->setLocale($previousLocale);
+
+            unset($this->coreVariableValues);
+        }
+    }
+
+    public static function getDefaultEmailLocale(): string
+    {
+        $locale = setting('email_default_locale');
+
+        if ($locale) {
+            return $locale;
+        }
+
+        return apply_filters('cms_default_email_locale', config('app.locale', 'en'));
+    }
+
+    protected function sanitizeUtf8(string $content): string
+    {
+        if (json_encode($content) === false) {
+            $content = iconv('UTF-8', 'UTF-8//IGNORE', $content) ?: $content;
+        }
+
+        return $content;
     }
 }

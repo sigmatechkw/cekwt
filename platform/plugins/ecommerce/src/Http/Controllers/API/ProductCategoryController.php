@@ -2,7 +2,7 @@
 
 namespace Botble\Ecommerce\Http\Controllers\API;
 
-use Botble\Base\Http\Controllers\BaseController;
+use Botble\Api\Http\Controllers\BaseApiController;
 use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Http\Requests\API\CategoryRequest;
 use Botble\Ecommerce\Http\Resources\API\AvailableProductResource;
@@ -14,7 +14,7 @@ use Botble\Slug\Facades\SlugHelper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class ProductCategoryController extends BaseController
+class ProductCategoryController extends BaseApiController
 {
     /**
      * Get list of product categories
@@ -31,7 +31,8 @@ class ProductCategoryController extends BaseController
     {
         $categories = ProductCategory::query()
             ->wherePublished()
-            ->orderBy('order')->latest()
+            ->with(['activeChildren'])
+            ->oldest('order')->latest()
             ->when($request->input('categories'), function ($query, $categoryIds) {
                 return $query->whereIn('id', $categoryIds);
             })
@@ -80,15 +81,16 @@ class ProductCategoryController extends BaseController
      *
      * @group Product Categories
      *
-     * @param ProductCategory $category
      * @param Request $request
      * @return JsonResponse
      */
-    public function products(ProductCategory $category, Request $request)
+    public function products(int|string $id, Request $request)
     {
         if (! EcommerceHelper::productFilterParamsValidated($request)) {
             $request = request();
         }
+
+        $category = ProductCategory::query()->findOrFail($id);
 
         $with = EcommerceHelper::withProductEagerLoadingRelations();
 

@@ -10,10 +10,10 @@
                 <div class="swiper-container swiper--top">
                     <div class="swiper-wrapper">
                         <div class="swiper-slide">
-                            <p>{!! $marqueText !!}</p>
+                            <p>{!! BaseHelper::clean($marqueText) !!}</p>
                         </div>
                         <div class="swiper-slide">
-                            <p>{!! $marqueText !!}</p>
+                            <p>{!! BaseHelper::clean($marqueText) !!}</p>
                         </div>
                     </div>
                 </div>
@@ -26,10 +26,7 @@
                 <div class="col-xxl-5 col-xl-6 col-lg-6 col-md-12">
                     <div class="tpdealcontact tp-red-deal-text pt-30 mb-30">
                         <div class="tpdealcontact__price mb-5">
-                            <span>{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                            @if($product->isOnSale())
-                                <del>{{ format_price($product->price_with_taxes) }}</del>
-                            @endif
+                            @include(EcommerceHelper::viewPath('includes.product-price'), ['product' => $product])
                         </div>
                         <div class="tpdealcontact__text mb-30">
                             <h4 class="tpdealcontact__title mb-10">
@@ -44,7 +41,7 @@
                         </div>
                         <div class="tpdealcontact__count">
                             <div class="tpdealcontact__countdown" data-countdown="{{ $flashSale->end_date }}"></div>
-                            <i>{!! __('Remains until the <br> end of the offer') !!}</i>
+                            <i>{!! BaseHelper::clean(__('Remains until the <br> end of the offer') )!!}</i>
                         </div>
                     </div>
                 </div>

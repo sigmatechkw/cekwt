@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class DeleteBulkAction extends TableBulkActionAbstract
 {
+    protected bool $silent = false;
+
     public function __construct()
     {
         $this
@@ -24,12 +26,21 @@ class DeleteBulkAction extends TableBulkActionAbstract
             });
     }
 
+    public function silent(bool $silent = true): static
+    {
+        $this->silent = $silent;
+
+        return $this;
+    }
+
     public function dispatch(BaseModel|Model $model, array $ids): BaseHttpResponse
     {
         $model->newQuery()->whereKey($ids)->each(function (BaseModel|Model $item): void {
             $item->delete();
 
-            DeletedContentEvent::dispatch($item::class, request(), $item);
+            if (! $this->silent) {
+                DeletedContentEvent::dispatch($item::class, request(), $item);
+            }
         });
 
         return BaseHttpResponse::make()

@@ -3,9 +3,10 @@
 namespace Botble\Mollie\Providers;
 
 use Botble\Base\Traits\LoadAndPublishDataTrait;
+use Illuminate\Contracts\Support\DeferrableProvider;
 use Illuminate\Support\ServiceProvider;
 
-class MollieServiceProvider extends ServiceProvider
+class MollieServiceProvider extends ServiceProvider implements DeferrableProvider
 {
     use LoadAndPublishDataTrait;
 
@@ -19,6 +20,7 @@ class MollieServiceProvider extends ServiceProvider
             ->loadHelpers()
             ->loadRoutes()
             ->loadAndPublishViews()
+            ->loadAndPublishTranslations()
             ->publishAssets();
 
         $this->app->booted(function (): void {

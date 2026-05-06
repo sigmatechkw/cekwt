@@ -25,8 +25,10 @@ class MediaSettingController extends SettingController
 
     public function update(MediaSettingRequest $request): BaseHttpResponse
     {
+        $data = $request->validated();
+
         $this->saveSettings([
-            ...$request->validated(),
+            ...$data,
             'media_folders_can_add_watermark' => $request->boolean('media_folders_can_add_watermark_all')
                 ? []
                 : $request->input('media_folders_can_add_watermark', []),
@@ -51,6 +53,7 @@ class MediaSettingController extends SettingController
         $totalFiles = $request->input('total');
         $offset = $request->input('offset', 0);
         $limit = $request->input('limit', RvMedia::getConfig('generate_thumbnails_chunk_limit'));
+        $overrideExisting = $request->boolean('override_existing');
 
         /**
          * @var Collection<MediaFile> $files
@@ -66,7 +69,7 @@ class MediaSettingController extends SettingController
         if ($files->isNotEmpty()) {
             foreach ($files as $file) {
                 try {
-                    RvMedia::generateThumbnails($file);
+                    RvMedia::generateThumbnails($file, overrideExisting: $overrideExisting);
                 } catch (Throwable $exception) {
                     BaseHelper::logError($exception);
                     $errors[] = $file->url;
@@ -80,7 +83,11 @@ class MediaSettingController extends SettingController
             return $this
                 ->httpResponse()
                 ->setError()
-                ->setMessage(trans('core/setting::setting.generate_thumbnails_error', ['count' => count($errors)]));
+                ->setMessage(trans('core/setting::setting.generate_thumbnails_error', ['count' => count($errors)]))
+                ->setData([
+                    'total' => $totalFiles,
+                    'next' => $offset + $limit,
+                ]);
         }
 
         return $this

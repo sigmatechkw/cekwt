@@ -6,8 +6,8 @@ use Botble\Base\Facades\BaseHelper;
 use Botble\Base\Supports\Helper;
 use Botble\Payment\Enums\PaymentMethodEnum;
 use Botble\Payment\Enums\PaymentStatusEnum;
+use Botble\Payment\Models\Payment;
 use Botble\Payment\Models\PaymentLog;
-use Botble\Payment\Repositories\Interfaces\PaymentInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request;
@@ -33,14 +33,45 @@ class PaymentHelper
 
         $orderIds = (array) $data['order_id'];
 
-        $payment = app(PaymentInterface::class)->getFirstBy([
-            'charge_id' => $data['charge_id'],
-            ['order_id', 'IN', $orderIds],
-        ]);
+        $payment = Payment::query()
+            ->where('charge_id', $data['charge_id'])
+            ->whereIn('order_id', $orderIds)
+            ->first();
 
         if ($payment) {
+            $dirty = false;
+
             if ($payment->status != $data['status']) {
                 $payment->status = $data['status'];
+                $dirty = true;
+            }
+
+            // Reconcile amount/currency on existing rows. The webhook may create a row
+            // before the callback runs `do_action(PAYMENT_ACTION_PAYMENT_PROCESSED)`,
+            // and the gateway-reported amount can differ from the order total when the
+            // cart was modified between Razorpay-order creation and capture. Without
+            // this, payments.amount stays stale and the admin "Paid amount" diverges
+            // from ec_orders.amount even though Razorpay charged the right amount.
+            //
+            // Note: refunded_amount is a DECIMAL column with no model cast, so Laravel
+            // returns it as a string ("0.00" for unrefunded). Loose-compare to 0 — a
+            // truthiness check (`! $payment->refunded_amount`) would always be false
+            // for "0.00" and skip the reconciliation entirely.
+            if ((float) $payment->refunded_amount <= 0) {
+                $newAmount = Arr::get($data, 'amount');
+                if ($newAmount !== null && (float) $payment->amount !== (float) $newAmount) {
+                    $payment->amount = $newAmount;
+                    $dirty = true;
+                }
+
+                $newCurrency = Arr::get($data, 'currency');
+                if ($newCurrency && $payment->currency !== $newCurrency) {
+                    $payment->currency = $newCurrency;
+                    $dirty = true;
+                }
+            }
+
+            if ($dirty) {
                 $payment->save();
             }
 
@@ -49,16 +80,25 @@ class PaymentHelper
 
         $paymentChannel = Arr::get($data, 'payment_channel', PaymentMethodEnum::COD);
 
-        return app(PaymentInterface::class)->create([
-            'amount' => $data['amount'],
-            'currency' => $data['currency'],
-            'charge_id' => $data['charge_id'],
-            'order_id' => Arr::first($orderIds),
-            'customer_id' => Arr::get($data, 'customer_id'),
-            'customer_type' => Arr::get($data, 'customer_type'),
-            'payment_channel' => $paymentChannel,
-            'status' => Arr::get($data, 'status', PaymentStatusEnum::PENDING),
-        ]);
+        // Get payment fee using PaymentFeeHelper
+        $paymentFee = 0;
+        if ($paymentChannel) {
+            $orderAmount = $data['amount'];
+            $paymentFee = PaymentFeeHelper::calculateFee($paymentChannel, $orderAmount);
+        }
+
+        return Payment::query()
+            ->create([
+                'amount' => $data['amount'],
+                'payment_fee' => $paymentFee,
+                'currency' => $data['currency'],
+                'charge_id' => $data['charge_id'],
+                'order_id' => Arr::first($orderIds),
+                'customer_id' => Arr::get($data, 'customer_id'),
+                'customer_type' => Arr::get($data, 'customer_type'),
+                'payment_channel' => $paymentChannel,
+                'status' => Arr::get($data, 'status', PaymentStatusEnum::PENDING),
+            ]);
     }
 
     public static function formatLog(

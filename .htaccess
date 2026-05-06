@@ -1,69 +1,10 @@
-# ------------------------------------------------------------------------------
-# 1. Laravel Routing Rules (Your Updated Rules)
-# ------------------------------------------------------------------------------
-<IfModule mod_rewrite.c>
-    RewriteEngine On
+RewriteEngine on
 
-    # Redirect Trailing Slashes If Not A Folder...
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} (.+)/$
-    RewriteRule ^ %1 [L,R=301]
+# Redirect Trailing Slashes If Not A Folder...
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} (.+)/$
+RewriteRule ^ %1 [L,R=301]
 
-    # Handle Front Controller...
-    RewriteCond %{REQUEST_URI} !^/public
-    RewriteRule ^(.*)$ public/$1 [L]
-</IfModule>
+RewriteCond %{REQUEST_URI} !^public
 
-# ------------------------------------------------------------------------------
-# 2. Browser Caching (Optimized for Laravel Assets)
-# ------------------------------------------------------------------------------
-<IfModule mod_mime.c>
-    AddType image/webp .webp
-    AddType image/svg+xml .svg .svgz
-    AddType application/font-woff .woff
-    AddType application/font-woff2 .woff2
-</IfModule>
-
-<IfModule mod_expires.c>
-    ExpiresActive On
-    ExpiresDefault "access plus 1 month"
-
-    # CSS / JS (Cache for 1 year)
-    ExpiresByType text/css A31536000
-    ExpiresByType application/javascript A31536000
-    ExpiresByType text/javascript A31536000
-
-    # Images & Media
-    ExpiresByType image/gif A31536000
-    ExpiresByType image/png A31536000
-    ExpiresByType image/jpg A31536000
-    ExpiresByType image/jpeg A31536000
-    ExpiresByType image/webp A31536000
-    ExpiresByType image/x-icon A31536000
-    ExpiresByType video/mp4 A31536000
-    ExpiresByType video/webm A31536000
-
-    # Fonts
-    ExpiresByType application/font-woff A31536000
-    ExpiresByType application/font-woff2 A31536000
-    ExpiresByType application/x-font-ttf A31536000
-</IfModule>
-
-# ------------------------------------------------------------------------------
-# 3. Gzip Compression (Speed Optimization)
-# ------------------------------------------------------------------------------
-<IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json image/svg+xml
-</IfModule>
-
-# ------------------------------------------------------------------------------
-# 4. Security & Headers
-# ------------------------------------------------------------------------------
-<IfModule mod_headers.c>
-    Header set Referrer-Policy "no-referrer-when-downgrade"
-    
-    # Optional: Unset Cookies for static assets to improve performance
-    <FilesMatch "\.(css|js|jpg|jpeg|png|gif|webp|ico|svg|woff|woff2)$">
-        Header unset Set-Cookie
-    </FilesMatch>
-</IfModule>
+RewriteRule ^(.*)$ public/$1 [L]

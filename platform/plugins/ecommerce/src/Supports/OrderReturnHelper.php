@@ -3,15 +3,19 @@
 namespace Botble\Ecommerce\Supports;
 
 use Botble\Base\Facades\EmailHandler;
+use Botble\Base\Supports\EmailHandler as EmailHandlerSupport;
 use Botble\Ecommerce\Enums\OrderReturnHistoryActionEnum;
+use Botble\Ecommerce\Enums\OrderReturnReasonEnum;
 use Botble\Ecommerce\Enums\OrderReturnStatusEnum;
 use Botble\Ecommerce\Events\OrderReturnedEvent;
+use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Facades\OrderHelper as OrderHelperFacade;
 use Botble\Ecommerce\Models\Order;
 use Botble\Ecommerce\Models\OrderProduct;
 use Botble\Ecommerce\Models\OrderReturn;
 use Botble\Ecommerce\Models\OrderReturnItem;
 use Botble\Ecommerce\Models\Product;
+use Botble\Media\Facades\RvMedia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -19,6 +23,44 @@ use Throwable;
 
 class OrderReturnHelper
 {
+    public function getReturnableItems(Order $order): array
+    {
+        $order->loadMissing('products');
+
+        $returnableItems = [];
+
+        foreach ($order->products as $orderProduct) {
+            $returnableItems[] = [
+                'order_item_id' => $orderProduct->id,
+                'product_id' => $orderProduct->product_id,
+                'product_name' => $orderProduct->product_name,
+                'product_image' => RvMedia::getImageUrl($orderProduct->product_image, 'thumb', false, RvMedia::getDefaultImage()),
+                'price' => format_price($orderProduct->price),
+                'qty' => $orderProduct->qty,
+            ];
+        }
+
+        return $returnableItems;
+    }
+
+    public function getReturnReasons(): array
+    {
+        $reasons = [];
+
+        foreach (OrderReturnReasonEnum::labels() as $value => $label) {
+            if ($value === '') {
+                continue;
+            }
+
+            $reasons[] = [
+                'value' => $value,
+                'label' => $label,
+            ];
+        }
+
+        return $reasons;
+    }
+
     public function returnOrder(Order $order, array $data): array
     {
         $orderReturnData = [
@@ -33,6 +75,10 @@ class OrderReturnHelper
             $orderReturnData['reason'] = $data['reason'];
         }
 
+        if (! empty($data['images'])) {
+            $orderReturnData['images'] = $data['images'];
+        }
+
         try {
             DB::beginTransaction();
 
@@ -41,6 +87,8 @@ class OrderReturnHelper
             $orderReturnItemData = [];
 
             $orderProductIds = [];
+
+            $now = Carbon::now();
 
             foreach ($data['items'] as $returnItem) {
                 $orderProduct = OrderProduct::query()->find($returnItem['order_item_id']);
@@ -58,7 +106,8 @@ class OrderReturnHelper
                     'qty' => $returnItem['qty'],
                     'reason' => $returnItem['reason'] ?? null,
                     'refund_amount' => $returnItem['refund_amount'] ?? null,
-                    'created_at' => Carbon::now(),
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
 
                 $orderProductIds[] = $orderProduct->product_id;
@@ -71,7 +120,7 @@ class OrderReturnHelper
              */
             $orderReturn->histories()->create([
                 'action' => OrderReturnHistoryActionEnum::CREATED,
-                'description' => __('Request return order with reason: :reason', ['reason' => $orderReturn->reason->label()]),
+                'description' => __('Request return order with reason: :reason', ['reason' => $orderReturn->reason?->label() ?? '']),
             ]);
 
             event(new OrderReturnedEvent($orderReturn));
@@ -93,10 +142,10 @@ class OrderReturnHelper
                         'products' => $orderProducts,
                     ])
                         ->render(),
-                    'return_reason' => $orderReturn->reason->label(),
+                    'return_reason' => $orderReturn->reason?->label() ?? '',
                 ]);
 
-                $mailer->sendUsingTemplate('order-return-request', get_admin_email()->toArray());
+                $mailer->sendUsingTemplate('order-return-request', EcommerceHelper::getAdminNotificationEmails());
             }
 
             DB::commit();
@@ -154,6 +203,15 @@ class OrderReturnHelper
                             }
                         }
                     }
+
+                    // Update restock_quantity to track that this quantity has been returned
+                    if ($item->order_product_id) {
+                        $orderProduct = OrderProduct::query()->find($item->order_product_id);
+                        if ($orderProduct) {
+                            $orderProduct->restock_quantity = ($orderProduct->restock_quantity ?? 0) + $item->qty;
+                            $orderProduct->save();
+                        }
+                    }
                 }
 
                 do_action(ACTION_AFTER_ORDER_RETURN_STATUS_COMPLETED, $orderReturn, $data);
@@ -172,14 +230,18 @@ class OrderReturnHelper
 
             $customer = $orderReturn->customer;
 
-            EmailHandler::setModule(ECOMMERCE_MODULE_SCREEN_NAME)
-                ->setVariableValues([
-                    'customer_name' => $customer->name,
-                    'order_id' => $orderReturn->order->code,
-                    'description' => $data['description'] ?? null,
-                    'status' => $orderReturn->return_status->label(),
-                ])
-                ->sendUsingTemplate('order-return-status-updated', $customer->email);
+            if ($customer?->email) {
+                $locale = $orderReturn->order?->getOrderMetadata('customer_locale') ?: EmailHandlerSupport::getDefaultEmailLocale();
+
+                EmailHandler::setModule(ECOMMERCE_MODULE_SCREEN_NAME)
+                    ->setVariableValues([
+                        'customer_name' => $customer->name ?? 'Guest',
+                        'order_id' => $orderReturn->order?->code ?? '',
+                        'description' => $data['description'] ?? null,
+                        'status' => $orderReturn->return_status->label(),
+                    ])
+                    ->sendUsingTemplateWithLocale('order-return-status-updated', $customer->email, $locale);
+            }
 
             DB::commit();
 

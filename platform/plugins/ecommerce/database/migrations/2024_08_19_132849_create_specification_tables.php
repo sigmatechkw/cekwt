@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Schema;
 return new class () extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('ec_specification_groups')) {
+            return;
+        }
+
         Schema::create('ec_specification_groups', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
@@ -39,15 +43,17 @@ return new class () extends Migration {
             $table->primary(['table_id', 'group_id']);
         });
 
-        Schema::create('ec_specification_attributes_translations', function (Blueprint $table): void {
-            $table->string('lang_code', 20);
-            $table->foreignId('ec_specification_attributes_id');
-            $table->string('name')->nullable();
-            $table->text('options')->nullable();
-            $table->string('default_value')->nullable();
+        if (! Schema::hasTable('ec_specification_attributes_translations')) {
+            Schema::create('ec_specification_attributes_translations', function (Blueprint $table): void {
+                $table->string('lang_code', 20);
+                $table->foreignId('ec_specification_attributes_id');
+                $table->string('name')->nullable();
+                $table->text('options')->nullable();
+                $table->string('default_value')->nullable();
 
-            $table->primary(['lang_code', 'ec_specification_attributes_id']);
-        });
+                $table->primary(['lang_code', 'ec_specification_attributes_id']);
+            });
+        }
 
         Schema::create('ec_product_specification_attribute', function (Blueprint $table): void {
             $table->foreignId('product_id');
@@ -75,6 +81,7 @@ return new class () extends Migration {
         Schema::dropIfExists('ec_specification_table_group');
         Schema::dropIfExists('ec_specification_tables');
         Schema::dropIfExists('ec_specification_attributes');
+        Schema::dropIfExists('ec_specification_attributes_translations');
         Schema::dropIfExists('ec_specification_groups');
     }
 };

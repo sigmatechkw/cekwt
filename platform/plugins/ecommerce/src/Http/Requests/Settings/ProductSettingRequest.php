@@ -15,11 +15,16 @@ class ProductSettingRequest extends Request
             'show_out_of_stock_products' => $onOffRule,
             'is_enabled_product_options' => $onOffRule,
             'is_enabled_related_products' => $onOffRule,
+            'related_products_source' => ['nullable', 'in:category,brand'],
+            'trending_products_period_days' => ['nullable', 'in:1,3,7,14,30,60,90'],
             'is_enabled_cross_sale_products' => $onOffRule,
+            'is_enabled_up_sale_products' => $onOffRule,
             'auto_generate_product_sku' => $onOffRule,
             'enable_product_specification' => $onOffRule,
             'product_sku_format' => ['nullable', 'string', 'max:120'],
             'make_product_barcode_required' => $onOffRule,
+            'delete_product_images_when_deleting' => $onOffRule,
+            'enable_product_currency_selection' => $onOffRule,
         ];
     }
 }

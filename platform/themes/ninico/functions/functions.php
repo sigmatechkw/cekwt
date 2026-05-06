@@ -99,7 +99,9 @@ app()->booted(function (): void {
 
     ThemeSupport::registerPreloader();
     ThemeSupport::registerSocialSharing();
+    ThemeSupport::registerSocialLinks();
     ThemeSupport::registerToastNotification();
+    ThemeSupport::registerDateFormatOption();
     ThemeSupport::registerSiteLogoHeight(35);
 
     add_filter('theme_preloader_versions', fn (array $versions) => [
@@ -261,6 +263,10 @@ app()->booted(function (): void {
     if (is_plugin_active('announcement')) {
         add_filter('announcement_display', fn () => null, 120);
     }
+
+    add_filter('ecommerce_product_gallery_origin_image_size', function (string $size) {
+        return $size === 'origin' ? 'medium' : $size;
+    }, 1119);
 });
 
 if (! function_exists('get_product_layouts')) {

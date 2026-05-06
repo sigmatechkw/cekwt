@@ -40,7 +40,7 @@
 
                     @if($isInAdmin)
                         @if (!empty($orderProduct->product_options) && is_array($orderProduct->product_options))
-                            {!! render_product_options_html($orderProduct->product_options, $orderProduct->price) !!}
+                            {!! render_product_options_html($orderProduct->product_options, $orderProduct->product?->front_sale_price ?? $orderProduct->price) !!}
                         @endif
                     @endif
 
@@ -48,6 +48,17 @@
                         EcommerceHelper::viewPath('includes.cart-item-options-extras'),
                         ['options' => $orderProduct->options]
                     )
+
+                    @php
+                        $bundleReference = Arr::get($orderProduct->options, 'extras.upsale_reference_product');
+                        $bundleReferenceProduct = $bundleReference ? \Botble\Ecommerce\Models\Product::query()->where('slug', $bundleReference)->first() : null;
+                    @endphp
+                    @if ($bundleReference)
+                        @include('plugins/ecommerce::themes.includes.cart-bundle-badge', [
+                            'reference' => $bundleReference,
+                            'referenceProduct' => $bundleReferenceProduct,
+                        ])
+                    @endif
 
                     {!! apply_filters(ECOMMERCE_ORDER_DETAIL_EXTRA_HTML, null, $orderProduct, $order) !!}
                     {!! apply_filters('ecommerce_order_product_item_extra_info', null, $orderProduct, $order) !!}
@@ -69,18 +80,7 @@
                                 @endif
                             </li>
 
-                            @if ($isInAdmin && is_plugin_active('marketplace') && $order->store->name)
-                                <li class="ws-nm">
-                                    <span class="bull">↳</span>
-                                    <span
-                                        class="black">{{ trans('plugins/marketplace::store.store') }}</span>
-                                    <a
-                                        class="fw-semibold text-decoration-underline"
-                                        href="{{ $order->store->url }}"
-                                        target="_blank"
-                                    >{{ $order->store->name }}</a>
-                                </li>
-                            @endif
+                            {!! apply_filters('ecommerce_order_product_item_extra_info_after', '', $orderProduct, $order) !!}
                         </ul>
                     @endif
                 </x-core::table.body.cell>

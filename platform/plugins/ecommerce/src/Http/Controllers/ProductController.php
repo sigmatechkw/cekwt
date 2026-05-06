@@ -64,6 +64,8 @@ class ProductController extends BaseController
 
         $this->pageTitle(trans('plugins/ecommerce::products.edit', ['name' => $product->name]));
 
+        $product->load(['licenseCodes.assignedOrderProduct.order']);
+
         event(new BeforeEditContentEvent($request, $product));
 
         return ProductForm::createFromModel($product)->renderForm();
@@ -258,5 +260,14 @@ class ProductController extends BaseController
         return $this
             ->httpResponse()
             ->withUpdatedSuccessMessage();
+    }
+
+    public function view(Product $product)
+    {
+        abort_if($product->is_variation, 404);
+
+        $this->pageTitle(trans('plugins/ecommerce::products.view', ['name' => $product->name]));
+
+        return view('plugins/ecommerce::products.view', $this->getProductViewData($product));
     }
 }

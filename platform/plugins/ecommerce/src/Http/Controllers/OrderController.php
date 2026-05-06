@@ -6,10 +6,10 @@ use Botble\ACL\Models\User;
 use Botble\Base\Events\UpdatedContentEvent;
 use Botble\Base\Facades\Assets;
 use Botble\Base\Facades\BaseHelper;
-use Botble\Base\Facades\EmailHandler;
 use Botble\Base\Http\Actions\DeleteResourceAction;
 use Botble\Base\Supports\Breadcrumb;
 use Botble\Ecommerce\Cart\CartItem;
+use Botble\Ecommerce\Enums\OrderCancellationReasonEnum;
 use Botble\Ecommerce\Enums\OrderHistoryActionEnum;
 use Botble\Ecommerce\Enums\OrderStatusEnum;
 use Botble\Ecommerce\Enums\ShippingCodStatusEnum;
@@ -24,6 +24,7 @@ use Botble\Ecommerce\Facades\InvoiceHelper;
 use Botble\Ecommerce\Facades\OrderHelper;
 use Botble\Ecommerce\Http\Requests\AddressRequest;
 use Botble\Ecommerce\Http\Requests\ApplyCouponRequest;
+use Botble\Ecommerce\Http\Requests\CancelOrderRequest;
 use Botble\Ecommerce\Http\Requests\CreateOrderRequest;
 use Botble\Ecommerce\Http\Requests\CreateShipmentRequest;
 use Botble\Ecommerce\Http\Requests\MarkOrderAsCompletedRequest;
@@ -135,7 +136,23 @@ class OrderController extends BaseController
         /**
          * @var Order $order
          */
-        $order = Order::query()->create($request->input());
+        $order = Order::query()->create($request->only([
+            'amount',
+            'user_id',
+            'shipping_method',
+            'shipping_option',
+            'shipping_amount',
+            'tax_amount',
+            'sub_total',
+            'coupon_code',
+            'discount_amount',
+            'promotion_amount',
+            'discount_description',
+            'description',
+            'is_confirmed',
+            'is_finished',
+            'status',
+        ]));
 
         if ($order) {
             OrderHistory::query()->create([
@@ -160,13 +177,15 @@ class OrderController extends BaseController
                 'user_id' => $userId,
             ]);
 
-            $createPaymentForOrderService->execute(
-                $order,
-                $request->input('payment_method'),
-                $paymentStatus,
-                $customerId,
-                $request->input('transaction_id')
-            );
+            if (is_plugin_active('payment')) {
+                $createPaymentForOrderService->execute(
+                    $order,
+                    $request->input('payment_method'),
+                    $paymentStatus,
+                    $customerId,
+                    $request->input('transaction_id')
+                );
+            }
 
             if ($request->input('customer_address.name')) {
                 OrderAddress::query()->create([
@@ -218,21 +237,19 @@ class OrderController extends BaseController
                     continue;
                 }
 
-                $ids = [$product->getKey()];
-                if ($product->is_variation && $product->original_product) {
-                    $ids[] = $product->original_product->id;
+                // Only decrease quantity if storehouse management is enabled and sufficient stock
+                if ($product->with_storehouse_management && $product->quantity >= $quantity) {
+                    $product->quantity -= $quantity;
+                    $product->save();
+
+                    // Trigger event to update parent product if this is a variation
+                    event(new ProductQuantityUpdatedEvent($product));
                 }
-
-                Product::query()
-                    ->whereIn('id', $ids)
-                    ->where('with_storehouse_management', 1)
-                    ->where('quantity', '>=', $quantity)
-                    ->decrement('quantity', $quantity);
-
-                event(new ProductQuantityUpdatedEvent($product));
             }
 
             event(new OrderCreated($order));
+
+            OrderHelper::sendOrderConfirmationEmail($order, true);
         }
 
         if (Arr::get($data, 'is_available_shipping')) {
@@ -300,7 +317,7 @@ class OrderController extends BaseController
 
     public function update(Order $order, UpdateOrderRequest $request)
     {
-        $order->fill($request->input());
+        $order->fill($request->validated());
         $order->save();
 
         event(new UpdatedContentEvent(ORDER_MODULE_SCREEN_NAME, $request, $order));
@@ -313,6 +330,8 @@ class OrderController extends BaseController
 
     public function destroy(Order $order)
     {
+        abort_unless(EcommerceHelper::isOrderDeletionEnabled(), 403);
+
         return DeleteResourceAction::make($order);
     }
 
@@ -343,7 +362,7 @@ class OrderController extends BaseController
 
     public function postResendOrderConfirmationEmail(Order $order)
     {
-        $result = OrderHelper::sendOrderConfirmationEmail($order);
+        $result = OrderHelper::sendOrderConfirmationEmail($order, false, true);
 
         if (! $result) {
             return $this
@@ -402,6 +421,10 @@ class OrderController extends BaseController
     public function postCreateShipment(Order $order, CreateShipmentRequest $request)
     {
         $result = $this->httpResponse();
+
+        if (Shipment::query()->where(['order_id' => $order->getKey()])->exists()) {
+            return $result->setMessage(trans('plugins/ecommerce::order.order_was_sent_to_shipping_team'));
+        }
 
         $shipment = [
             'order_id' => $order->getKey(),
@@ -477,10 +500,10 @@ class OrderController extends BaseController
 
     public function postUpdateShippingAddress(OrderAddress $address, AddressRequest $request)
     {
+        abort_if($address->order->status == OrderStatusEnum::CANCELED, 401);
+
         $address->fill($request->input());
         $address->save();
-
-        abort_if($address->order->status == OrderStatusEnum::CANCELED, 401);
 
         return $this
             ->httpResponse()
@@ -494,17 +517,17 @@ class OrderController extends BaseController
     public function postUpdateTaxInformation(OrderTaxInformation $taxInformation, Request $request)
     {
         $validated = $request->validate([
-            'company_tax_code' => 'required|string|min:3|max:20',
-            'company_name' => 'required|string|min:3|max:120',
-            'company_address' => 'required|string|min:3|max:255',
-            'company_email' => 'required|email|min:6|max:60',
+            'company_tax_code' => ['required', 'string', 'min:3', 'max:20'],
+            'company_name' => ['required', 'string', 'min:3', 'max:120'],
+            'company_address' => ['required', 'string', 'min:3', 'max:255'],
+            'company_email' => ['required', 'email', 'min:6', 'max:60'],
         ]);
 
         $taxInformation->load(['order']);
 
-        $taxInformation->update($validated);
+        abort_if($taxInformation->order->status == OrderStatusEnum::CANCELED, 401);
 
-        abort_if($taxInformation->order->status === OrderStatusEnum::CANCELED, 401);
+        $taxInformation->update($validated);
 
         return $this
             ->httpResponse()
@@ -512,15 +535,32 @@ class OrderController extends BaseController
             ->setMessage(trans('plugins/ecommerce::order.tax_info.update_success'));
     }
 
-    public function postCancelOrder(Order $order)
+    public function postCancelOrder(CancelOrderRequest $request, Order $order)
     {
         abort_unless($order->canBeCanceledByAdmin(), 403);
 
-        OrderHelper::cancelOrder($order);
+        $reason = $request->input('cancellation_reason');
+        $reasonDescription = $request->input('cancellation_reason_description');
+
+        OrderHelper::cancelOrder($order, $reason, $reasonDescription);
+
+        $adminName = Auth::user()?->name ?? trans('plugins/ecommerce::order.admin');
+
+        $description = match (true) {
+            $reason && $reason !== OrderCancellationReasonEnum::OTHER => trans('plugins/ecommerce::order.order_was_canceled_by_with_reason', [
+                'admin' => $adminName,
+                'reason' => OrderCancellationReasonEnum::getLabel($reason),
+            ]),
+            $reason === OrderCancellationReasonEnum::OTHER && $reasonDescription => trans('plugins/ecommerce::order.order_was_canceled_by_with_reason', [
+                'admin' => $adminName,
+                'reason' => $reasonDescription,
+            ]),
+            default => trans('plugins/ecommerce::order.order_was_canceled_by'),
+        };
 
         OrderHistory::query()->create([
             'action' => OrderHistoryActionEnum::CANCEL_ORDER,
-            'description' => trans('plugins/ecommerce::order.order_was_canceled_by'),
+            'description' => $description,
             'order_id' => $order->id,
             'user_id' => Auth::id(),
         ]);
@@ -640,11 +680,16 @@ class OrderController extends BaseController
             Arr::set($metadata, 'refunds', $refunds);
 
             $payment->metadata = $metadata;
+
+            if (isset($refundData['refunded_amount_in_currency'])) {
+                $refundAmount = $refundData['refunded_amount_in_currency'];
+            }
         }
 
         $payment->refunded_amount += $refundAmount;
 
-        if ($payment->refunded_amount == $payment->amount) {
+        $tolerance = max(0.01, $payment->amount * 0.01);
+        if (abs($payment->refunded_amount - $payment->amount) <= $tolerance) {
             $payment->status = PaymentStatusEnum::REFUNDED;
         }
 
@@ -682,6 +727,7 @@ class OrderController extends BaseController
                 'extras' => json_encode([
                     'amount' => $refundAmount,
                     'method' => $payment->payment_channel ?? PaymentMethodEnum::COD,
+                    'refund_note' => $request->input('refund_note'),
                 ]),
             ]);
         }
@@ -815,7 +861,7 @@ class OrderController extends BaseController
             $customer->avatar = (string) $customer->avatar_url;
 
             if ($customer) {
-                $customerOrderNumbers = $customer->orders()->count();
+                $customerOrderNumbers = $customer->completedOrders()->count();
             }
 
             $customerAddresses = CustomerAddressResource::collection($customer->addresses);
@@ -874,18 +920,22 @@ class OrderController extends BaseController
         CreatePaymentForOrderService $createPaymentForOrderService
     ) {
         DB::transaction(function () use ($order, $createPaymentForOrderService, $request): void {
-            /** @var User $user */
+            /**
+             * @var User $user
+             */
             $user = Auth::user();
 
             $order->update(['is_finished' => true]);
 
-            $createPaymentForOrderService->execute(
-                $order,
-                $request->input('payment_method'),
-                $request->input('payment_status'),
-                $order->user_id != 0 ? $order->user_id : null,
-                $request->input('transaction_id')
-            );
+            if (is_plugin_active('payment')) {
+                $createPaymentForOrderService->execute(
+                    $order,
+                    $request->input('payment_method'),
+                    $request->input('payment_status'),
+                    $order->user_id != 0 ? $order->user_id : null,
+                    $request->input('transaction_id')
+                );
+            }
 
             $order->histories()->create([
                 'order_id' => $order->getKey(),
@@ -918,12 +968,9 @@ class OrderController extends BaseController
         }
 
         try {
-            $mailer = EmailHandler::setModule(ECOMMERCE_MODULE_SCREEN_NAME);
-
             $order->dont_show_order_info_in_product_list = true;
-            OrderHelper::setEmailVariables($order);
 
-            $mailer->sendUsingTemplate('order_recover', $email);
+            OrderHelper::sendOrderEmail($order, 'order_recover', $email);
 
             return $this
                 ->httpResponse()->setMessage(trans('plugins/ecommerce::order.sent_email_incomplete_order_success'));
@@ -958,9 +1005,8 @@ class OrderController extends BaseController
             'variationInfo.configurableProduct',
             'variationProductAttributes',
         ];
-        if (is_plugin_active('marketplace')) {
-            $with = array_merge($with, ['store', 'variationInfo.configurableProduct.store']);
-        }
+
+        $with = apply_filters('ecommerce_order_product_relations', $with);
 
         $inputProducts = collect($request->input('products'));
         if ($productIds = $inputProducts->pluck('id')->all()) {
@@ -1058,13 +1104,7 @@ class OrderController extends BaseController
                 }
             }
 
-            if (is_plugin_active('marketplace')) {
-                $store = $product->original_product->store;
-                if ($store->id) {
-                    $productName .= ' (' . $store->name . ')';
-                }
-                $stores[] = $store;
-            }
+            $productName = apply_filters('ecommerce_order_product_name', $productName, $product, $stores);
 
             $parentProduct = $product->original_product;
 
@@ -1085,7 +1125,9 @@ class OrderController extends BaseController
             ];
 
             $price = $product->front_sale_price;
-            $price = Cart::getPriceByOptions($price, $productOptions);
+            $priceResult = Cart::getPriceByOptions($price, $productOptions);
+            $price = $priceResult['price'];
+            $options['option_price_once'] = $priceResult['option_price_once'];
 
             $cartItem = CartItem::fromAttributes(
                 $product->id,
@@ -1109,11 +1151,10 @@ class OrderController extends BaseController
             }
         }
 
-        if (is_plugin_active('marketplace')) {
-            if (count(array_unique(array_filter($stores->pluck('id')->all()))) > 1) {
-                $isError = true;
-                $message[] = trans('plugins/marketplace::order.products_are_from_different_vendors');
-            }
+        $validationResult = apply_filters('ecommerce_order_validate_products', ['isError' => false, 'message' => null], $stores);
+        if ($validationResult['isError']) {
+            $isError = true;
+            $message[] = $validationResult['message'];
         }
 
         $subAmount = Cart::rawSubTotalByItems($cartItems);
@@ -1136,14 +1177,7 @@ class OrderController extends BaseController
         if ($isAvailableShipping) {
             $origin = EcommerceHelper::getOriginAddress();
 
-            if (is_plugin_active('marketplace')) {
-                if ($stores->count() && ($store = $stores->first()) && $store->id) {
-                    $origin = Arr::only($store->toArray(), $addressKeys);
-                    if (! EcommerceHelper::isUsingInMultipleCountries()) {
-                        $origin['country'] = EcommerceHelper::getFirstCountryId();
-                    }
-                }
-            }
+            $origin = apply_filters('ecommerce_order_shipping_origin_address', $origin, $stores, $addressKeys);
 
             $items = [];
             foreach ($productItems as $product) {

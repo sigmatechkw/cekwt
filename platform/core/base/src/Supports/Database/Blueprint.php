@@ -4,6 +4,7 @@ namespace Botble\Base\Supports\Database;
 
 use Botble\Base\Models\BaseModel;
 use Closure;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Schema\Blueprint as IlluminateBlueprint;
 use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Support\Facades\DB;
@@ -11,9 +12,9 @@ use Throwable;
 
 class Blueprint extends IlluminateBlueprint
 {
-    public function __construct($table, ?Closure $callback = null, $prefix = '')
+    public function __construct(Connection $connection, $table, ?Closure $callback = null)
     {
-        parent::__construct($table, $callback, $prefix);
+        parent::__construct($connection, $table, $callback);
 
         rescue(function (): void {
             if (DB::getDefaultConnection() === 'mysql') {
@@ -40,7 +41,7 @@ class Blueprint extends IlluminateBlueprint
         };
     }
 
-    public function morphs($name, $indexName = null): void
+    public function morphs($name, $indexName = null, $after = null): void
     {
         match ($this->getModelTypeOfId()) {
             'UUID' => $this->uuidMorphs($name, $indexName),
@@ -49,7 +50,7 @@ class Blueprint extends IlluminateBlueprint
         };
     }
 
-    public function nullableMorphs($name, $indexName = null): void
+    public function nullableMorphs($name, $indexName = null, $after = null): void
     {
         match ($this->getModelTypeOfId()) {
             'UUID' => $this->nullableUuidMorphs($name, $indexName),

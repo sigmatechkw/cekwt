@@ -7,7 +7,8 @@ const setCookie = (name, value, days) => {
         date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000))
         expires = `; expires=${date.toUTCString()}`
     }
-    document.cookie = `${name}=${value || ''}${expires}; path=/`
+    const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+    document.cookie = `${name}=${value || ''}${expires}; path=/; SameSite=Lax${secure}`
 }
 
 const getCookie = (name) => {
@@ -100,18 +101,34 @@ document.addEventListener('DOMContentLoaded', () => {
         autoplayAnnouncement()
     }
 
-    const lazyLoading = $('[data-bb-toggle="announcement-lazy-loading"]')
+    const lazyLoading = document.querySelector('[data-bb-toggle="announcement-lazy-loading"]')
 
-    if (lazyLoading.length) {
-        $.ajax({
-            url: lazyLoading.data('url'),
+    if (lazyLoading) {
+        const url = lazyLoading.getAttribute('data-url')
+
+        fetch(url, {
             method: 'GET',
-            success: ({ data }) => {
-                lazyLoading.replaceWith(data)
-
-                init()
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             }
         })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(({ data }) => {
+                const template = document.createElement('template')
+                template.innerHTML = data.trim()
+                lazyLoading.replaceWith(template.content)
+
+                init();
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+            });
     } else {
         init()
     }

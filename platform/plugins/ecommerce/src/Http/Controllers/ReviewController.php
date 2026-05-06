@@ -2,11 +2,13 @@
 
 namespace Botble\Ecommerce\Http\Controllers;
 
+use Botble\Base\Enums\BaseStatusEnum;
 use Botble\Base\Events\CreatedContentEvent;
 use Botble\Base\Facades\Assets;
 use Botble\Base\Http\Actions\DeleteResourceAction;
 use Botble\Base\Http\Requests\SelectSearchAjaxRequest;
 use Botble\Base\Supports\Breadcrumb;
+use Botble\Ecommerce\Enums\ReviewBadgeEnum;
 use Botble\Ecommerce\Forms\ReviewForm;
 use Botble\Ecommerce\Http\Requests\ReviewRequest;
 use Botble\Ecommerce\Models\Customer;
@@ -16,6 +18,8 @@ use Botble\Ecommerce\Tables\ReviewTable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ReviewController extends BaseController
 {
@@ -79,7 +83,10 @@ class ReviewController extends BaseController
                 ->setMessage(trans('plugins/ecommerce::review.review_already_exists'));
         }
 
-        $review = Review::query()->forceCreate($request->validated());
+        $review  = new Review();
+        $review->forceFill($request->validated());
+        $review->status = BaseStatusEnum::PUBLISHED;
+        $review->save();
 
         event(new CreatedContentEvent('review', $request, $review));
 
@@ -106,6 +113,20 @@ class ReviewController extends BaseController
         $this->pageTitle(trans('plugins/ecommerce::review.view', ['name' => $review->user->name ?: $review->customer_name]));
 
         return view('plugins/ecommerce::reviews.show', compact('review'));
+    }
+
+    public function updateBadge(Review $review, Request $request)
+    {
+        $request->validate([
+            'badge_type' => ['required', Rule::in(ReviewBadgeEnum::values())],
+        ]);
+
+        $review->badge_type = $request->input('badge_type');
+        $review->save();
+
+        return $this
+            ->httpResponse()
+            ->setMessage(trans('core/base::notices.update_success_message'));
     }
 
     public function destroy(Review $review)

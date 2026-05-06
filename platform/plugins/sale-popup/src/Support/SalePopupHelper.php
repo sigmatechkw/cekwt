@@ -50,6 +50,7 @@ class SalePopupHelper
             'show_verified',
             'show_close_button',
             'show_quick_view_button',
+            'show_on_mobile',
             'display_pages',
         ];
     }

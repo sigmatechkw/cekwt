@@ -115,7 +115,7 @@ return new class () extends Migration {
             $table->id();
             $table->string('title', 120);
             $table->string('slug', 120)->nullable();
-            $table->string('display_layout')->default('swatch_dropdown');
+            $table->string('display_layout')->default('dropdown');
             $table->tinyInteger('is_searchable')->unsigned()->default(1);
             $table->tinyInteger('is_comparable')->unsigned()->default(1);
             $table->tinyInteger('is_use_in_product_listing')->unsigned()->default(0);
@@ -129,7 +129,7 @@ return new class () extends Migration {
             $table->foreignId('attribute_set_id');
             $table->string('title', 120);
             $table->string('slug', 120)->nullable();
-            $table->string('color', 50)->nullable();
+            $table->string('color', 120)->nullable();
             $table->string('image')->nullable();
             $table->tinyInteger('is_default')->unsigned()->default(0);
             $table->tinyInteger('order')->unsigned()->default(0);

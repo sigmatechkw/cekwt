@@ -13,6 +13,7 @@ use Botble\Base\Facades\DashboardMenu;
 use Botble\Base\Facades\PageTitle;
 use Botble\Base\Facades\PanelSectionManager as PanelSectionManagerFacade;
 use Botble\Base\GlobalSearch\GlobalSearchableManager;
+use Botble\Base\Http\Middleware\PublicCacheControl;
 use Botble\Base\Models\BaseModel;
 use Botble\Base\PanelSections\Manager as PanelSectionManager;
 use Botble\Base\PanelSections\System\SystemPanelSection;
@@ -23,6 +24,7 @@ use Botble\Base\Supports\Breadcrumb;
 use Botble\Base\Supports\CustomResourceRegistrar;
 use Botble\Base\Supports\DashboardMenuItem;
 use Botble\Base\Supports\Database\Blueprint;
+use Botble\Base\Supports\EmailHandler;
 use Botble\Base\Supports\Filter;
 use Botble\Base\Supports\GoogleFonts;
 use Botble\Base\Supports\Helper;
@@ -33,17 +35,20 @@ use Botble\Base\Widgets\Contracts\AdminWidget as AdminWidgetContract;
 use Botble\Setting\Providers\SettingServiceProvider;
 use Botble\Setting\Supports\SettingStore;
 use DateTimeZone;
+use Fruitcake\LaravelDebugbar\LaravelDebugbar;
 use Illuminate\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Routing\ResourceRegistrar;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 class BaseServiceProvider extends ServiceProvider
 {
@@ -84,21 +89,25 @@ class BaseServiceProvider extends ServiceProvider
 
         $this->app->singleton('core.google-fonts', GoogleFonts::class);
 
+        $this->app->singleton(EmailHandler::class);
+
         $this->registerRouteMacros();
 
         $this->prepareAliasesIfMissing();
 
-        config()->set(['session.cookie' => config('core.base.general.session_cookie', 'botble_session')]);
+        config()->set(['session.cookie' => Str::slug(config('core.base.general.session_cookie', 'botble_session'), '_')]);
 
         $this->overrideDefaultConfigs();
 
-        Schema::defaultStringLength(191);
+        Schema::defaultStringLength(255);
     }
 
     public function boot(): void
     {
         $this
-            ->loadAndPublishConfigurations(['permissions', 'assets'])
+            ->loadAndPublishConfigurations(['assets'])
+            ->loadAndPublishConfigurations(['email'])
+            ->loadAndPublishConfigurations(['permissions'])
             ->loadAndPublishViews()
             ->loadAnonymousComponents()
             ->loadAndPublishTranslations()
@@ -108,15 +117,20 @@ class BaseServiceProvider extends ServiceProvider
 
         $this->app['blade.compiler']->anonymousComponentPath($this->getViewsPath() . '/components', 'core');
 
+        $this->registerPublicCacheControl();
+
         $this->overridePackagesConfigs();
 
         $this->app->booted(function (): void {
+            $this->overrideDebugbarConfig();
+
             do_action(BASE_ACTION_INIT);
         });
 
-        $this->registerDashboardMenus();
-
-        $this->registerPanelSections();
+        if (BaseHelper::isAdminRequest()) {
+            $this->registerDashboardMenus();
+            $this->registerPanelSections();
+        }
 
         Paginator::useBootstrap();
 
@@ -167,48 +181,53 @@ class BaseServiceProvider extends ServiceProvider
 
     protected function configureIni(): void
     {
-        $currentLimit = @ini_get('memory_limit');
-        $currentLimitInt = Helper::convertHrToBytes($currentLimit);
+        static $memoryLimit = null;
+        static $maxExecutionTime = null;
 
+        if ($memoryLimit === null) {
+            $memoryLimit = @ini_get('memory_limit');
+        }
+
+        $currentLimitInt = Helper::convertHrToBytes($memoryLimit);
         $baseConfig = $this->getBaseConfig();
+        $configMemoryLimit = Arr::get($baseConfig, 'memory_limit');
 
-        $memoryLimit = Arr::get($baseConfig, 'memory_limit');
-
-        if (! $memoryLimit) {
-            if (Helper::isIniValueChangeable('memory_limit') === false) {
-                $memoryLimit = $currentLimit;
-            } else {
-                $memoryLimit = '256M';
-            }
+        if (! $configMemoryLimit) {
+            $configMemoryLimit = Helper::isIniValueChangeable('memory_limit') === false
+                ? $memoryLimit
+                : '256M';
         }
 
-        $limitInt = Helper::convertHrToBytes($memoryLimit);
+        $limitInt = Helper::convertHrToBytes($configMemoryLimit);
         if ($currentLimitInt !== -1 && ($limitInt === -1 || $limitInt > $currentLimitInt)) {
-            BaseHelper::iniSet('memory_limit', $memoryLimit);
+            BaseHelper::iniSet('memory_limit', $configMemoryLimit);
         }
 
-        $maxExecutionTime = Arr::get($baseConfig, 'max_execution_time');
-
-        $currentExecutionTimeLimit = @ini_get('max_execution_time');
-
-        if ($currentExecutionTimeLimit < $maxExecutionTime) {
-            BaseHelper::iniSet('max_execution_time', $maxExecutionTime);
+        if ($maxExecutionTime === null) {
+            $maxExecutionTime = @ini_get('max_execution_time');
         }
+
+        $configMaxExecutionTime = Arr::get($baseConfig, 'max_execution_time');
+        if ($maxExecutionTime < $configMaxExecutionTime) {
+            BaseHelper::iniSet('max_execution_time', $configMaxExecutionTime);
+        }
+    }
+
+    protected function getConfigValue(string $key, mixed $default = null): mixed
+    {
+        return config("core.base.general.{$key}", $default);
     }
 
     protected function forceSSL(): void
     {
-        $baseConfig = $this->getBaseConfig();
-
-        $forceUrl = Arr::get($baseConfig, 'force_root_url');
+        $forceUrl = $this->getConfigValue('force_root_url');
         if (! empty($forceUrl)) {
-            URL::forceRootUrl($forceUrl);
+            URL::useOrigin($forceUrl);
         }
 
-        $forceSchema = Arr::get($baseConfig, 'force_schema');
+        $forceSchema = $this->getConfigValue('force_schema');
         if (! empty($forceSchema)) {
             $this->app['request']->server->set('HTTPS', 'on');
-
             URL::forceScheme($forceSchema);
         }
     }
@@ -255,12 +274,18 @@ class BaseServiceProvider extends ServiceProvider
                     'password',
                 ],
             ],
-            'debugbar.enabled' => $this->app->hasDebugModeEnabled() &&
-                ! $this->app->runningInConsole() &&
-                ! $this->app->environment(['testing', 'production']),
-            'debugbar.capture_ajax' => false,
-            'debugbar.remote_sites_path' => '',
-            'core.base.general.google_fonts' => GoogleFonts::getFonts(),
+            'scribe.type' => 'static',
+            'scribe.assets_directory' => 'vendor/core/packages/api',
+            'scribe.routes' => [
+                [
+                    'match' => [
+                        'prefixes' => ['api/*'],
+                        'domains' => ['*'],
+                    ],
+                    'include' => [],
+                    'exclude' => [],
+                ],
+            ],
         ]);
 
         if (
@@ -287,13 +312,60 @@ class BaseServiceProvider extends ServiceProvider
          * @var SettingStore $setting
          */
         $setting = $this->app[SettingStore::class];
-        $timezone = $setting->get('time_zone', $config->get('app.timezone'));
-        $locale = $setting->get('locale', Arr::get($baseConfig, 'locale', $config->get('app.locale')));
+
+        $cacheKey = 'core.base.boot_settings';
+        $bootSettings = cache()->remember($cacheKey, 3600, function () use ($setting, $config) {
+            return [
+                'timezone' => $setting->get('time_zone', $config->get('app.timezone')),
+                'locale' => $setting->get('locale', $config->get('app.locale')),
+            ];
+        });
+
+        $timezone = $bootSettings['timezone'];
+        $locale = $bootSettings['locale'];
 
         $this->app->setLocale($locale);
 
-        if (in_array($timezone, DateTimeZone::listIdentifiers())) {
+        try {
+            new DateTimeZone($timezone);
             date_default_timezone_set($timezone);
+        } catch (\Exception) {
+            // Invalid timezone, keep the default
+        }
+
+        if ($iframeRegex = Arr::get($baseConfig, 'iframe_regex')) {
+            $baseConfig['purifier']['default']['URI.SafeIframeRegexp'] = $iframeRegex;
+        } else {
+            $allowedIframeUrls = [
+                'www.youtube.com/embed/',
+                'player.vimeo.com/video/',
+                'maps.google.com/maps',
+                'www.google.com/maps|docs.google.com/',
+                'drive.google.com/',
+                'view.officeapps.live.com/op/embed.aspx',
+                'onedrive.live.com/embed',
+                'open.spotify.com/embed',
+                'www.googletagmanager.com',
+                'www.facebook.com/plugins',
+                'tiktok.com/embed',
+                parse_url($config->get('app.url'), PHP_URL_HOST),
+            ];
+
+            if ($extraUrl = Arr::get($baseConfig, 'allowed_iframe_urls', [])) {
+                $extraUrls = array_map(
+                    fn ($url) => preg_replace('#^https?://(www\.)?#', '', trim($url)),
+                    explode('|', $extraUrl)
+                );
+
+                $allowedIframeUrls = [
+                    ...$allowedIframeUrls,
+                    ...$extraUrls,
+                ];
+            }
+
+            $allowedIframeUrls = implode('|', apply_filters('core_allowed_iframe_urls', $allowedIframeUrls));
+
+            $baseConfig['purifier']['default']['URI.SafeIframeRegexp'] = '%^(http://|https://|//)(' . $allowedIframeUrls . ')%';
         }
 
         $config->set([
@@ -305,11 +377,29 @@ class BaseServiceProvider extends ServiceProvider
             ],
             'ziggy.except' => ['debugbar.*'],
             'datatables-buttons.pdf_generator' => 'excel',
+            'datatables-html.script' => 'core/table::script',
+            'datatables-html.editor' => 'core/table::editor',
             'excel.exports.csv.use_bom' => true,
             'dompdf.public_path' => public_path(),
             'database.connections.mysql.strict' => Arr::get($baseConfig, 'db_strict_mode'),
+            'database.connections.mysql.prefix' => Arr::get($baseConfig, 'db_prefix'),
             'excel.imports.ignore_empty' => true,
             'excel.imports.csv.input_encoding' => Arr::get($baseConfig, 'csv_import_input_encoding', 'UTF-8'),
+        ]);
+    }
+
+    protected function overrideDebugbarConfig(): void
+    {
+        if (! class_exists(LaravelDebugbar::class)) {
+            return;
+        }
+
+        $this->app['config']->set([
+            'debugbar.enabled' => $this->app->hasDebugModeEnabled() &&
+                ! $this->app->runningInConsole() &&
+                ! $this->app->environment(['testing', 'production']),
+            'debugbar.capture_ajax' => false,
+            'debugbar.remote_sites_path' => '',
         ]);
     }
 
@@ -370,5 +460,12 @@ class BaseServiceProvider extends ServiceProvider
         if (! class_exists('AdminHelper')) {
             $aliasLoader->alias('AdminHelper', AdminHelper::class);
         }
+    }
+
+    protected function registerPublicCacheControl(): void
+    {
+        $this->app['events']->listen(RequestHandled::class, function (RequestHandled $event): void {
+            $this->app->make(PublicCacheControl::class)->handleRequestHandled($event);
+        });
     }
 }

@@ -14,7 +14,7 @@
                                 <div class="postbox__meta mb-15">
                                     <span><i class="fal fa-user-alt"></i> {{ $post->author->name }}</span>
                                     <div class="d-flex gap-4">
-                                        <span><i class="fal fa-clock"></i> {{ $post->created_at->translatedFormat('M d, Y') }}</span>
+                                        <span><i class="fal fa-clock"></i> {{ Theme::formatDate($post->created_at) }}</span>
                                         <span><i class="fal fa-eye"></i> {{ number_format($post->views) }}</span>
                                     </div>
                                 </div>

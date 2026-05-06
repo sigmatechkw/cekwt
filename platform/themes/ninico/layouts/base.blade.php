@@ -13,6 +13,10 @@
                 --primary-color: {{ $primaryColor = theme_option('primary_color', '#d51243') }};
                 --primary-color-rgb: {{ implode(',', BaseHelper::hexToRgb($primaryColor)) }};
                 --primary-font: '{{ $primaryFont }}', sans-serif;
+                --header-background-color: {{ theme_option('header_background_color', '#fff') }};
+                --header-text-color: {{ theme_option('header_text_color', '#040404') }};
+                --header-menu-text-color: {{ theme_option('header_menu_text_color', '#040404') }};
+                --header-menu-text-hover-color: {{ theme_option('header_menu_text_hover_color', $primaryColor) }};
             }
         </style>
 
@@ -45,6 +49,8 @@
 
         {!! Theme::footer() !!}
 
-        @include('packages/theme::toast-notification')
+        @if (is_plugin_active('ecommerce'))
+            @include('plugins/ecommerce::themes.includes.gtm-script')
+        @endif
     </body>
 </html>

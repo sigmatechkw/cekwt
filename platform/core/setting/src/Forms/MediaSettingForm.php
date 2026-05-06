@@ -43,7 +43,8 @@ class MediaSettingForm extends SettingForm
             ->setUrl(route('settings.media.update'))
             ->when(setting('media_enable_thumbnail_sizes', true), function (): void {
                 $this->setActionButtons(
-                    view('core/setting::partials.media.action-buttons', ['form' => $this->getFormOption('id')])->render()
+                    view('core/setting::partials.media.action-buttons', ['form' => $this->getFormOption('id')])->render(
+                    )
                 );
             })
             ->setValidatorClass(MediaSettingRequest::class)
@@ -54,15 +55,7 @@ class MediaSettingForm extends SettingForm
                 SelectField::class,
                 SelectFieldOption::make()
                     ->label(trans('core/setting::setting.media.driver'))
-                    ->choices(apply_filters('core_media_drivers', [
-                        'public' => trans('core/setting::setting.media.local_disk'),
-                        's3' => 'Amazon S3',
-                        'r2' => 'Cloudflare R2',
-                        'do_spaces' => 'DigitalOcean Spaces',
-                        'wasabi' => 'Wasabi',
-                        'bunnycdn' => 'BunnyCDN',
-                        'backblaze' => 'Backblaze B2',
-                    ]))
+                    ->choices(RvMedia::getAvailableDrivers())
                     ->selected($mediaDriver = RvMedia::getMediaDriver())
                     ->colspan(6)
             )
@@ -77,9 +70,9 @@ class MediaSettingForm extends SettingForm
                 'media_aws_access_key_id',
                 TextField::class,
                 TextFieldOption::make()
-                ->label(trans('core/setting::setting.media.aws_access_key_id'))
-                ->value(setting('media_aws_access_key_id'))
-                ->placeholder('Ex: AKIAIKYXBSNBXXXXXX')
+                    ->label(trans('core/setting::setting.media.aws_access_key_id'))
+                    ->value(setting('media_aws_access_key_id'))
+                    ->placeholder('Ex: AKIAIKYXBSNBXXXXXX')
             )
             ->add(
                 'media_aws_secret_key',
@@ -120,6 +113,15 @@ class MediaSettingForm extends SettingForm
                     ->label(trans('core/setting::setting.media.aws_endpoint'))
                     ->value(setting('media_aws_endpoint'))
                     ->placeholder(trans('core/setting::setting.media.optional'))
+            )
+            ->add(
+                'media_s3_path',
+                TextField::class,
+                TextFieldOption::make()
+                    ->label(trans('core/setting::setting.media.s3_path'))
+                    ->value(setting('media_s3_path'))
+                    ->placeholder(trans('core/setting::setting.media.s3_path_placeholder'))
+                    ->helperText(trans('core/setting::setting.media.s3_path_placeholder'))
             )
             ->add(
                 'media_aws_use_path_style_endpoint',
@@ -232,7 +234,8 @@ class MediaSettingForm extends SettingForm
                 OnOffCheckboxField::class,
                 CheckboxFieldOption::make()
                     ->label(trans('core/setting::setting.media.do_spaces_cdn_enabled'))
-                    ->checked((bool) setting('media_do_spaces_cdn_enabled'))
+                    ->helperText(trans('core/setting::setting.media.do_spaces_cdn_enabled_helper'))
+                    ->value((bool) setting('media_do_spaces_cdn_enabled'))
             )
             ->add(
                 'media_do_spaces_cdn_custom_domain',
@@ -296,6 +299,24 @@ class MediaSettingForm extends SettingForm
                     ->placeholder('Default: /')
                     ->helperText(trans('core/setting::setting.media.wasabi_root_helper'))
             )
+            ->add(
+                'media_wasabi_cdn_enabled',
+                OnOffCheckboxField::class,
+                CheckboxFieldOption::make()
+                    ->label(trans('core/setting::setting.media.wasabi_cdn_enabled'))
+                    ->helperText(trans('core/setting::setting.media.wasabi_cdn_enabled_helper'))
+                    ->value($wasabiCdnEnabled = (bool) setting('media_wasabi_cdn_enabled'))
+            )
+            ->addOpenCollapsible('media_wasabi_cdn_enabled', '1', $wasabiCdnEnabled)
+            ->add(
+                'media_wasabi_cdn_custom_domain',
+                TextField::class,
+                TextFieldOption::make()
+                    ->label(trans('core/setting::setting.media.media_wasabi_cdn_custom_domain'))
+                    ->value(setting('media_wasabi_cdn_custom_domain'))
+                    ->placeholder(trans('core/setting::setting.media.media_wasabi_cdn_custom_domain_placeholder'))
+            )
+            ->addCloseCollapsible('media_wasabi_cdn_enabled', '1')
             ->addCloseCollapsible('media_driver', 'wasabi')
             ->addOpenCollapsible('media_driver', 'bunnycdn', $mediaDriver === 'bunnycdn')
             ->add(
@@ -390,6 +411,24 @@ class MediaSettingForm extends SettingForm
                     ])
                     ->selected(setting('media_backblaze_use_path_style_endpoint'))
             )
+            ->add(
+                'media_backblaze_cdn_enabled',
+                OnOffCheckboxField::class,
+                CheckboxFieldOption::make()
+                    ->label(trans('core/setting::setting.media.backblaze_cdn_enabled'))
+                    ->helperText(trans('core/setting::setting.media.backblaze_cdn_enabled_helper'))
+                    ->value($backBlazeCdnEnabled = (bool) setting('media_backblaze_cdn_enabled'))
+            )
+            ->addOpenCollapsible('media_backblaze_cdn_enabled', '1', $backBlazeCdnEnabled)
+            ->add(
+                'media_backblaze_cdn_custom_domain',
+                TextField::class,
+                TextFieldOption::make()
+                    ->label(trans('core/setting::setting.media.media_backblaze_cdn_custom_domain'))
+                    ->value(setting('media_backblaze_cdn_custom_domain'))
+                    ->placeholder(trans('core/setting::setting.media.media_backblaze_cdn_custom_domain_placeholder'))
+            )
+            ->addCloseCollapsible('media_backblaze_cdn_enabled', '1')
             ->addCloseCollapsible('media_driver', 'backblaze')
             ->add(
                 'close_media_drivers',
@@ -402,6 +441,7 @@ class MediaSettingForm extends SettingForm
                 OnOffCheckboxField::class,
                 OnOffFieldOption::make()
                     ->label(trans('core/setting::setting.media.use_original_name_for_file_path'))
+                    ->helperText(trans('core/setting::setting.media.use_original_name_for_file_path_helper'))
                     ->value(setting('media_use_original_name_for_file_path'))
                     ->colspan(6)
             )
@@ -419,7 +459,17 @@ class MediaSettingForm extends SettingForm
                 OnOffCheckboxField::class,
                 OnOffFieldOption::make()
                     ->label(trans('core/setting::setting.media.keep_original_file_size_and_quality'))
-                    ->value(setting('media_keep_original_file_size_and_quality'))
+                    ->helperText(trans('core/setting::setting.media.keep_original_file_size_and_quality_helper'))
+                    ->value($keepOriginalQuality = setting('media_keep_original_file_size_and_quality'))
+                    ->colspan(6)
+            )
+            ->add(
+                'media_image_quality',
+                NumberField::class,
+                NumberFieldOption::make()
+                    ->label(trans('core/setting::setting.media.image_quality'))
+                    ->value(setting('media_image_quality', 75))
+                    ->helperText(trans('core/setting::setting.media.image_quality_helper'))
                     ->colspan(6)
             )
             ->add(
@@ -427,6 +477,7 @@ class MediaSettingForm extends SettingForm
                 OnOffCheckboxField::class,
                 OnOffFieldOption::make()
                     ->label(trans('core/setting::setting.media.turn_off_automatic_url_translation_into_latin'))
+                    ->helperText(trans('core/setting::setting.media.turn_off_automatic_url_translation_into_latin_helper'))
                     ->value(RvMedia::turnOffAutomaticUrlTranslationIntoLatin())
                     ->colspan(6)
             )
@@ -459,9 +510,13 @@ class MediaSettingForm extends SettingForm
                 NumberFieldOption::make()
                     ->label(trans('core/setting::setting.media.max_upload_filesize'))
                     ->value(setting('max_upload_filesize'))
-                    ->placeholder(trans('core/setting::setting.media.max_upload_filesize_placeholder', [
-                        'size' => ($maxSize = BaseHelper::humanFilesize(RvMedia::getServerConfigMaxUploadFileSize())),
-                    ]))
+                    ->placeholder(
+                        trans('core/setting::setting.media.max_upload_filesize_placeholder', [
+                            'size' => ($maxSize = BaseHelper::humanFilesize(
+                                RvMedia::getServerConfigMaxUploadFileSize()
+                            )),
+                        ])
+                    )
                     ->step(0.01)
                     ->helperText(trans('core/setting::setting.media.max_upload_filesize_helper', ['size' => $maxSize]))
                     ->colspan(6)
@@ -476,14 +531,60 @@ class MediaSettingForm extends SettingForm
                     ->colspan(6)
             )
             ->add(
+                'open_media_reduce_large_image_size',
+                HtmlField::class,
+                HtmlFieldOption::make()
+                    ->content('<div class="col-lg-12">')
+            )
+            ->addOpenCollapsible('media_reduce_large_image_size', '1', $reduceLargeImageSize === '1')
+            ->add(
+                'open_row_media_reduce_large_image_size',
+                HtmlField::class,
+                HtmlFieldOption::make()
+                    ->content('<div class="row">')
+            )
+            ->add(
+                'media_image_max_width',
+                NumberField::class,
+                NumberFieldOption::make()
+                    ->label(trans('core/setting::setting.media.image_max_width'))
+                    ->value(setting('media_image_max_width'))
+                    ->placeholder(trans('core/setting::setting.media.image_max_width_placeholder'))
+                    ->helperText(trans('core/setting::setting.media.image_max_width_helper'))
+                    ->colspan(3)
+            )
+            ->add(
+                'media_image_max_height',
+                NumberField::class,
+                NumberFieldOption::make()
+                    ->label(trans('core/setting::setting.media.image_max_height'))
+                    ->value(setting('media_image_max_height'))
+                    ->placeholder(trans('core/setting::setting.media.image_max_height_placeholder'))
+                    ->helperText(trans('core/setting::setting.media.image_max_height_helper'))
+                    ->colspan(3)
+            )
+            ->add(
+                'close_row_media_reduce_large_image_size',
+                HtmlField::class,
+                HtmlFieldOption::make()
+                    ->content('</div>')
+            )
+            ->addCloseCollapsible('media_reduce_large_image_size', '1')
+            ->add(
                 'media_customize_upload_path',
                 OnOffCheckboxField::class,
                 OnOffFieldOption::make()
                     ->label(trans('core/setting::setting.media.customize_upload_path'))
                     ->value($customizeUploadPath = setting('media_customize_upload_path', false))
-                    ->helperText(trans('core/setting::setting.media.customize_upload_path_helper', [
-                        'path' => str_replace(base_path(), '', is_link(public_path('storage')) ? storage_path('app/public') : public_path('storage')),
-                    ]))
+                    ->helperText(
+                        trans('core/setting::setting.media.customize_upload_path_helper', [
+                            'path' => str_replace(
+                                base_path(),
+                                '',
+                                is_link(public_path('storage')) ? storage_path('app/public') : public_path('storage')
+                            ),
+                        ])
+                    )
                     ->colspan(6)
             )
             ->add(
@@ -531,46 +632,6 @@ class MediaSettingForm extends SettingForm
                     ->content('</div>')
             )
             ->add(
-                'open_media_reduce_large_image_size',
-                HtmlField::class,
-                HtmlFieldOption::make()
-                    ->content('<div class="col-lg-12">')
-            )
-            ->addOpenCollapsible('media_reduce_large_image_size', '1', $reduceLargeImageSize === '1')
-            ->add(
-                'open_row_media_reduce_large_image_size',
-                HtmlField::class,
-                HtmlFieldOption::make()
-                    ->content('<div class="row">')
-            )
-            ->add(
-                'media_image_max_width',
-                NumberField::class,
-                NumberFieldOption::make()
-                    ->label(trans('core/setting::setting.media.image_max_width'))
-                    ->value(setting('media_image_max_width'))
-                    ->placeholder(trans('core/setting::setting.media.image_max_width_placeholder'))
-                    ->helperText(trans('core/setting::setting.media.image_max_width_helper'))
-                    ->colspan(3)
-            )
-            ->add(
-                'media_image_max_height',
-                NumberField::class,
-                NumberFieldOption::make()
-                    ->label(trans('core/setting::setting.media.image_max_height'))
-                    ->value(setting('media_image_max_height'))
-                    ->placeholder(trans('core/setting::setting.media.image_max_height_placeholder'))
-                    ->helperText(trans('core/setting::setting.media.image_max_height_helper'))
-                    ->colspan(3)
-            )
-            ->add(
-                'close_row_media_reduce_large_image_size',
-                HtmlField::class,
-                HtmlFieldOption::make()
-                    ->content('</div>')
-            )
-            ->addCloseCollapsible('media_reduce_large_image_size', '1')
-            ->add(
                 'close_media_reduce_large_image_size',
                 HtmlField::class,
                 HtmlFieldOption::make()
@@ -588,15 +649,24 @@ class MediaSettingForm extends SettingForm
                 OnOffCheckboxField::class,
                 CheckboxFieldOption::make()
                     ->label(trans('core/setting::setting.media.enable_watermark'))
+                    ->helperText(trans('core/setting::setting.media.enable_watermark_helper'))
                     ->value($mediaWatermarkEnabledValue = setting('media_watermark_enabled'))
                     ->colspan(6)
             )
-            ->addOpenCollapsible($mediaWatermarkEnabled, '1', $mediaWatermarkEnabledValue, ['class' => 'form-fieldset col-lg-12'])
+            ->addOpenCollapsible(
+                $mediaWatermarkEnabled,
+                '1',
+                $mediaWatermarkEnabledValue,
+                ['class' => 'form-fieldset col-lg-12']
+            )
             ->add(
                 'media_folders_can_add_watermark_field',
                 HtmlField::class,
                 HtmlFieldOption::make()
-                    ->view('core/setting::partials.media.media-folders-can-add-watermark-field', compact('folders', 'folderIds'))
+                    ->view(
+                        'core/setting::partials.media.media-folders-can-add-watermark-field',
+                        compact('folders', 'folderIds')
+                    )
             )
             ->add('row_1', HtmlField::class, HtmlFieldOption::make()->content('<div class="row">'))
             ->add(
@@ -604,6 +674,7 @@ class MediaSettingForm extends SettingForm
                 MediaImageField::class,
                 MediaImageFieldOption::make()
                     ->label(trans('core/setting::setting.media.watermark_source'))
+                    ->helperText(trans('core/setting::setting.media.watermark_source_helper'))
                     ->value(setting('media_watermark_source'))
                     ->colspan(6)
             )
@@ -697,14 +768,19 @@ class MediaSettingForm extends SettingForm
                     ->value($enabledThumbnailSizes = setting('media_enable_thumbnail_sizes', true))
                     ->colspan(6)
             )
-            ->addOpenCollapsible('media_enable_thumbnail_sizes', '1', $enabledThumbnailSizes, ['class' => 'form-fieldset col-lg-12'])
+            ->addOpenCollapsible(
+                'media_enable_thumbnail_sizes',
+                '1',
+                $enabledThumbnailSizes,
+                ['class' => 'form-fieldset col-lg-12']
+            )
             ->add('open_row_2', HtmlField::class, HtmlFieldOption::make()->content('<div class="row row-cols-lg-6">'))
             ->add(
                 'title_media_size',
                 HtmlField::class,
                 HtmlFieldOption::make()
-                ->content('<h4>' . trans('core/setting::setting.media.sizes') . ':</h4>')
-                ->colspan(6)
+                    ->content('<h4>' . trans('core/setting::setting.media.sizes') . ':</h4>')
+                    ->colspan(6)
             );
 
         foreach (RvMedia::getSizes() as $name => $size) {
@@ -769,7 +845,12 @@ class MediaSettingForm extends SettingForm
                 AlertField::class,
                 AlertFieldOption::make()
                     ->type('warning')
-                    ->content(trans('core/setting::setting.media.update_thumbnail_sizes_warning', ['button_text' => trans('core/setting::setting.generate_thumbnails')]))
+                    ->content(
+                        trans(
+                            'core/setting::setting.media.update_thumbnail_sizes_warning',
+                            ['button_text' => trans('core/setting::setting.generate_thumbnails')]
+                        )
+                    )
                     ->colspan(6)
             )
             ->add('close_row_2', HtmlField::class, HtmlFieldOption::make()->content('</div>'))

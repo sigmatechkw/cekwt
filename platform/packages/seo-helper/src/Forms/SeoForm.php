@@ -2,10 +2,12 @@
 
 namespace Botble\SeoHelper\Forms;
 
+use Botble\Base\Forms\FieldOptions\HtmlFieldOption;
 use Botble\Base\Forms\FieldOptions\MediaImageFieldOption;
 use Botble\Base\Forms\FieldOptions\RadioFieldOption;
 use Botble\Base\Forms\FieldOptions\TextareaFieldOption;
 use Botble\Base\Forms\FieldOptions\TextFieldOption;
+use Botble\Base\Forms\Fields\HtmlField;
 use Botble\Base\Forms\Fields\MediaImageField;
 use Botble\Base\Forms\Fields\RadioField;
 use Botble\Base\Forms\Fields\TextareaField;
@@ -26,6 +28,7 @@ class SeoForm extends FormAbstract
                 TextFieldOption::make()
                     ->label(trans('packages/seo-helper::seo-helper.seo_title'))
                     ->placeholder(trans('packages/seo-helper::seo-helper.seo_title'))
+                    ->helperText(trans('packages/seo-helper::seo-helper.seo_title_helper'))
                     ->maxLength(70)
                     ->allowOverLimit()
                     ->value(old('seo_meta.seo_title', $meta['seo_title']))
@@ -36,16 +39,24 @@ class SeoForm extends FormAbstract
                 TextareaFieldOption::make()
                     ->label(trans('packages/seo-helper::seo-helper.seo_description'))
                     ->placeholder(trans('packages/seo-helper::seo-helper.seo_description'))
+                    ->helperText(trans('packages/seo-helper::seo-helper.seo_description_helper'))
                     ->rows(3)
                     ->maxLength(160)
                     ->allowOverLimit()
                     ->value(old('seo_meta.seo_description', $meta['seo_description']))
             )
             ->add(
+                'meta_keywords',
+                HtmlField::class,
+                HtmlFieldOption::make()
+                    ->content(view('packages/theme::partials.no-meta-keywords')->render())
+            )
+            ->add(
                 'seo_meta_image',
                 MediaImageField::class,
                 MediaImageFieldOption::make()
                     ->label(trans('packages/seo-helper::seo-helper.seo_image'))
+                    ->helperText(trans('packages/seo-helper::seo-helper.seo_image_helper'))
                     ->value(old('seo_meta_image', $meta['seo_image']))
             )
             ->add(
@@ -53,6 +64,7 @@ class SeoForm extends FormAbstract
                 RadioField::class,
                 RadioFieldOption::make()
                     ->label(trans('packages/seo-helper::seo-helper.index'))
+                    ->helperText(trans('packages/seo-helper::seo-helper.index_helper'))
                     ->selected(old('seo_meta.index', $meta['index']))
                     ->choices([
                         'index' => trans('packages/seo-helper::seo-helper.index'),

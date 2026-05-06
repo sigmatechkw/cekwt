@@ -28,6 +28,8 @@ class Invoice extends BaseModel
         'sub_total',
         'tax_amount',
         'shipping_amount',
+        'shipping_tax_amount',
+        'payment_fee',
         'discount_amount',
         'amount',
         'payment_id',
@@ -44,6 +46,7 @@ class Invoice extends BaseModel
         'sub_total' => 'float',
         'tax_amount' => 'float',
         'shipping_amount' => 'float',
+        'payment_fee' => 'float',
         'discount_amount' => 'float',
         'amount' => 'float',
         'status' => InvoiceStatusEnum::class,
@@ -73,6 +76,10 @@ class Invoice extends BaseModel
 
     public function payment(): BelongsTo
     {
+        if (! is_plugin_active('payment')) {
+            return $this->belongsTo(self::class, 'payment_id')->whereRaw('1 = 0')->withDefault();
+        }
+
         return $this->belongsTo(Payment::class)->withDefault();
     }
 
@@ -87,6 +94,28 @@ class Invoice extends BaseModel
         } while (static::query()->where('code', $code)->exists());
 
         return $code;
+    }
+
+    /**
+     * Aggregate tax components across all invoice items, grouped by code.
+     *
+     * @return array<int, array{name: string, code: string, total: float, rate: float}>
+     */
+    public function taxComponentsSummary(): array
+    {
+        $this->loadMissing('items.taxComponents');
+
+        return $this->items
+            ->flatMap(fn (InvoiceItem $item) => $item->taxComponents)
+            ->groupBy('code')
+            ->map(fn ($group) => [
+                'name' => $group->first()->name,
+                'code' => $group->first()->code,
+                'total' => $group->sum('amount'),
+                'rate' => $group->first()->rate,
+            ])
+            ->values()
+            ->all();
     }
 
     protected function taxClassesName(): Attribute

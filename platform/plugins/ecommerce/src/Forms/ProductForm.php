@@ -5,6 +5,7 @@ namespace Botble\Ecommerce\Forms;
 use Botble\Base\Facades\Assets;
 use Botble\Base\Facades\Html;
 use Botble\Base\Forms\FieldOptions\ContentFieldOption;
+use Botble\Base\Forms\FieldOptions\DatePickerFieldOption;
 use Botble\Base\Forms\FieldOptions\EditorFieldOption;
 use Botble\Base\Forms\FieldOptions\MediaImageFieldOption;
 use Botble\Base\Forms\FieldOptions\NameFieldOption;
@@ -12,6 +13,7 @@ use Botble\Base\Forms\FieldOptions\NumberFieldOption;
 use Botble\Base\Forms\FieldOptions\OnOffFieldOption;
 use Botble\Base\Forms\FieldOptions\SelectFieldOption;
 use Botble\Base\Forms\FieldOptions\StatusFieldOption;
+use Botble\Base\Forms\Fields\DatePickerField;
 use Botble\Base\Forms\Fields\EditorField;
 use Botble\Base\Forms\Fields\MediaImageField;
 use Botble\Base\Forms\Fields\MediaImagesField;
@@ -51,7 +53,7 @@ class ProductForm extends FormAbstract
 
         $productCollections = ProductCollection::query()->pluck('name', 'id')->all();
 
-        $productLabels = ProductLabel::query()->pluck('name', 'id')->all();
+        $productLabels = ProductLabel::query()->wherePublished()->pluck('name', 'id')->all();
 
         $productId = null;
         $selectedCategories = [];
@@ -114,6 +116,14 @@ class ProductForm extends FormAbstract
                 OnOffFieldOption::make()
                     ->label(trans('core/base::forms.is_featured'))
                     ->defaultValue(false)
+            )
+            ->add(
+                'is_new_until',
+                DatePickerField::class,
+                DatePickerFieldOption::make()
+                    ->label(trans('plugins/ecommerce::products.form.is_new_until'))
+                    ->helperText(trans('plugins/ecommerce::products.form.is_new_until_helper'))
+                    ->defaultValue(null)
             )
             ->add(
                 'categories[]',
@@ -185,7 +195,7 @@ class ProductForm extends FormAbstract
                     ]);
             })
             ->when(EcommerceHelper::isTaxEnabled(), function (): void {
-                $taxes = Tax::query()->orderBy('percentage')->get()->pluck('title_with_percentage', 'id')->all();
+                $taxes = Tax::query()->oldest('percentage')->get()->pluck('title_with_percentage', 'id')->all();
 
                 if ($taxes) {
                     $selectedTaxes = [];
@@ -197,15 +207,27 @@ class ProductForm extends FormAbstract
 
                     if ($product && $product->getKey()) {
                         $selectedTaxes = $product->taxes()->pluck('tax_id')->all();
-                    } elseif ($defaultTaxRate = get_ecommerce_setting('default_tax_rate')) {
-                        $selectedTaxes = [$defaultTaxRate];
                     }
 
-                    $this->add('taxes[]', MultiCheckListField::class, [
+                    $taxFieldOptions = [
                         'label' => trans('plugins/ecommerce::products.form.taxes'),
                         'choices' => $taxes,
                         'value' => old('taxes', $selectedTaxes),
-                    ]);
+                    ];
+
+                    if (empty($selectedTaxes) && get_ecommerce_setting('default_tax_rate')) {
+                        $taxFieldOptions['help_block'] = [
+                            'text' => trans('plugins/ecommerce::products.form.taxes_helper', [
+                                'url' => route('tax.index'),
+                            ]),
+                            'tag' => 'span',
+                            'attr' => [
+                                'class' => 'text-warning',
+                            ],
+                        ];
+                    }
+
+                    $this->add('taxes[]', MultiCheckListField::class, $taxFieldOptions);
                 }
             })
             ->when(EcommerceHelper::isCartEnabled(), function (ProductForm $form): void {
@@ -299,23 +321,24 @@ class ProductForm extends FormAbstract
                             ]
                         ),
                         'before_wrapper' => '<div id="main-manage-product-type">',
+                        'after_wrapper' => $productAttributeSets->isEmpty() ? '</div>' : null,
                         'priority' => 2,
                     ],
-                    'attributes' => [
-                        'title' => trans('plugins/ecommerce::products.attributes'),
-                        'content' => view('plugins/ecommerce::products.partials.add-product-attributes', [
-                            'product' => $this->getModel(),
-                            'productAttributeSets' => $productAttributeSets,
-                            'addAttributeToProductUrl' => $this->getModel()->id
-                                ? route('products.add-attribute-to-product', $this->getModel()->id)
-                                : null,
-                        ]),
-                        'header_actions' => $productAttributeSets->isNotEmpty()
-                            ? view('plugins/ecommerce::products.partials.product-attribute-actions')
-                            : null,
-                        'after_wrapper' => '</div>',
-                        'priority' => 3,
-                    ],
+                    ...($productAttributeSets->isNotEmpty() ? [
+                        'attributes' => [
+                            'title' => trans('plugins/ecommerce::products.attributes'),
+                            'content' => view('plugins/ecommerce::products.partials.add-product-attributes', [
+                                'product' => $this->getModel(),
+                                'productAttributeSets' => $productAttributeSets,
+                                'addAttributeToProductUrl' => $this->getModel()->id
+                                    ? route('products.add-attribute-to-product', $this->getModel()->id)
+                                    : null,
+                            ]),
+                            'header_actions' => view('plugins/ecommerce::products.partials.product-attribute-actions'),
+                            'after_wrapper' => '</div>',
+                            'priority' => 3,
+                        ],
+                    ] : []),
                 ]);
         } elseif ($productId) {
             $productVariationTable = app(ProductVariationTable::class)

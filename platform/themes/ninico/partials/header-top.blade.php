@@ -80,12 +80,13 @@
                 <div class="headertoplag d-flex align-items-center justify-content-end">
                     {!! Theme::partial('currency-switcher') !!}
                     {!! Theme::partial('language-switcher') !!}
-                    @if(theme_option('social_links') && $socialLinks = json_decode(theme_option('social_links'), true))
+                    @if ($socialLinks = Theme::getSocialLinks())
                         <div class="menu-top-social">
                             @foreach($socialLinks as $socialLink)
-                                @php($socialLink = collect($socialLink)->pluck('value', 'key'))
-                                <a href="{{ $socialLink->get('url') }}" title="{{ $socialLink->get('name') }}">
-                                    <i class="{{ $socialLink->get('icon') }}"></i>
+                                @continue(! $icon = $socialLink->getIconHtml())
+
+                                <a {{ $socialLink->getAttributes() }}>
+                                    {{ $icon }}
                                 </a>
                             @endforeach
                         </div>

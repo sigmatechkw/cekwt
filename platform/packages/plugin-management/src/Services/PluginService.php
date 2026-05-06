@@ -8,14 +8,20 @@ use Botble\Base\Supports\Helper;
 use Botble\PluginManagement\Events\ActivatedPluginEvent;
 use Botble\PluginManagement\Events\DeactivatedPlugin;
 use Botble\PluginManagement\Events\RemovedPlugin;
+use Botble\PluginManagement\Events\UpdatedPluginEvent;
+use Botble\PluginManagement\Events\UpdatingPluginEvent;
 use Botble\PluginManagement\PluginManifest;
 use Botble\Setting\Facades\Setting;
+use Carbon\Carbon;
 use Composer\Autoload\ClassLoader;
 use Exception;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -23,6 +29,8 @@ use Throwable;
 
 class PluginService
 {
+    protected static array $activatedPlugins = [];
+
     public function __construct(
         protected Application $app,
         protected Filesystem $files,
@@ -358,7 +366,7 @@ class PluginService
 
     public function getPluginNamespace(string $plugin): string
     {
-        return $this->app['config']->get('core.base.general.plugin_namespaces.' . $plugin, $plugin);
+        return $this->app['config']->get('core.base.general.plugin_namespaces.' . $plugin, 'plugins/' . $plugin);
     }
 
     protected function saveActivatedPlugins(array $plugins): array
@@ -379,6 +387,11 @@ class PluginService
         Helper::clearCache();
         $cacheService = ClearCacheService::make();
 
+        Cache::forget('core_installed_plugins');
+
+        self::$activatedPlugins = [];
+
+        $cacheService->clearBootstrapCache();
         $cacheService->clearConfig();
         $cacheService->clearRoutesCache();
     }
@@ -425,6 +438,34 @@ class PluginService
 
     public function validatePlugin(string $plugin, bool $throw = false): bool
     {
+        $validator = $this->makePluginValidator($plugin, $throw);
+
+        $passes = $validator->passes();
+
+        if (! $passes) {
+            logger()->info($validator->getMessageBag()->toJson());
+
+            if ($throw) {
+                throw new Exception($validator->getMessageBag()->toJson());
+            }
+        }
+
+        return $passes;
+    }
+
+    public function getPluginValidationErrors(string $plugin): array
+    {
+        $validator = $this->makePluginValidator($plugin);
+
+        if ($validator->passes()) {
+            return [];
+        }
+
+        return $validator->errors()->toArray();
+    }
+
+    protected function makePluginValidator(string $plugin, bool $strict = false): \Illuminate\Contracts\Validation\Validator
+    {
         $content = $this->getPluginInfo($plugin);
 
         $rules = [
@@ -440,23 +481,11 @@ class PluginService
             'minimum_core_version' => ['nullable', 'string', 'regex:/^[0-9]+\.[0-9]+\.[0-9]+$/'],
         ];
 
-        if ($throw) {
+        if ($strict) {
             $rules['id'] = ['required', 'string', 'max:100'];
         }
 
-        $validator = Validator::make($content, $rules);
-
-        $passes = $validator->passes();
-
-        if (! $passes) {
-            logger()->info($validator->getMessageBag()->toJson());
-
-            if ($throw) {
-                throw new Exception($validator->getMessageBag()->toJson());
-            }
-        }
-
-        return $passes;
+        return Validator::make($content, $rules);
     }
 
     public function getInstalledPluginIds(): array
@@ -497,5 +526,169 @@ class PluginService
         }
 
         return false;
+    }
+
+    public static function getActivatedPlugins(): array
+    {
+        if (self::$activatedPlugins && ! app()->runningInConsole()) {
+            return self::$activatedPlugins;
+        }
+
+        $cacheEnabled = Setting::get('plugin_cache_enabled', true);
+
+        if (
+            $cacheEnabled
+            && Cache::has($key = 'core_installed_plugins')
+            && ! app()->runningInConsole()
+            && ($activatedPlugins = Cache::get($key))
+        ) {
+            self::$activatedPlugins = $activatedPlugins;
+
+            return $activatedPlugins;
+        }
+
+        $activatedPlugins = Setting::get('activated_plugins');
+
+        if (! $activatedPlugins) {
+            return [];
+        }
+
+        $activatedPlugins = json_decode($activatedPlugins, true);
+
+        if (! $activatedPlugins) {
+            return [];
+        }
+
+        $plugins = array_unique($activatedPlugins);
+
+        $existingPlugins = BaseHelper::scanFolder(plugin_path());
+
+        $activatedPlugins = array_diff($plugins, array_diff($plugins, $existingPlugins));
+
+        $activatedPlugins = array_values($activatedPlugins);
+
+        if ($cacheEnabled) {
+            Cache::put('core_installed_plugins', $activatedPlugins, Carbon::now()->addMinutes(30));
+        }
+
+        self::$activatedPlugins = $activatedPlugins;
+
+        return $activatedPlugins;
+    }
+
+    public static function getInstalledPlugins(): array
+    {
+        $list = [];
+
+        $plugins = BaseHelper::scanFolder(plugin_path());
+
+        if (! empty($plugins)) {
+            foreach ($plugins as $plugin) {
+                $path = plugin_path($plugin);
+                if (! File::isDirectory($path) || ! File::exists($path . '/plugin.json')) {
+                    continue;
+                }
+
+                $list[] = $plugin;
+            }
+        }
+
+        return $list;
+    }
+
+    public function updatePlugin(string $name, callable $updateCallback): mixed
+    {
+        $validate = $this->validate($name);
+
+        if ($validate['error']) {
+            return response()->json($validate);
+        }
+
+        $content = $this->getPluginInfo($name);
+
+        if (empty($content)) {
+            return response()->json([
+                'error' => true,
+                'message' => trans('packages/plugin-management::plugin.invalid_json'),
+            ]);
+        }
+
+        $this->clearCache();
+
+        UpdatingPluginEvent::dispatch($name);
+
+        if (! class_exists($content['provider'])) {
+            $loader = new ClassLoader();
+            $loader->setPsr4($content['namespace'], plugin_path($name . '/src'));
+            $loader->register(true);
+        }
+
+        if (class_exists($content['namespace'] . 'Plugin')) {
+            try {
+                call_user_func([$content['namespace'] . 'Plugin', 'updating']);
+            } catch (Throwable $exception) {
+                BaseHelper::logError($exception);
+            }
+        }
+
+        $result = $updateCallback();
+
+        if (class_exists($content['namespace'] . 'Plugin')) {
+            try {
+                call_user_func([$content['namespace'] . 'Plugin', 'updated']);
+            } catch (Throwable $exception) {
+                BaseHelper::logError($exception);
+            }
+        }
+
+        $this->clearCache();
+
+        $this->pluginManifest->generateManifest();
+
+        UpdatedPluginEvent::dispatch($name);
+
+        return $result;
+    }
+
+    public function getPluginLicenseSettingKey(string $name): ?string
+    {
+        $content = $this->getPluginInfo($name);
+
+        if (empty($content) || ! isset($content['namespace'])) {
+            return null;
+        }
+
+        $pluginClass = $content['namespace'] . 'Plugin';
+
+        if (! class_exists($pluginClass)) {
+            if (! class_exists($content['provider'])) {
+                $loader = new ClassLoader();
+                $loader->setPsr4($content['namespace'], plugin_path($name . '/src'));
+                $loader->register(true);
+            }
+        }
+
+        if (class_exists($pluginClass) && method_exists($pluginClass, 'getLicenseSettingKey')) {
+            try {
+                return call_user_func([$pluginClass, 'getLicenseSettingKey']);
+            } catch (Throwable $exception) {
+                BaseHelper::logError($exception);
+            }
+        }
+
+        return null;
+    }
+
+    public function getPluginPurchaseCode(string $name): ?string
+    {
+        $licenseSettingKey = $this->getPluginLicenseSettingKey($name);
+
+        if (! $licenseSettingKey) {
+            return null;
+        }
+
+        $purchaseCode = Setting::get($licenseSettingKey);
+
+        return Crypt::decryptString($purchaseCode);
     }
 }

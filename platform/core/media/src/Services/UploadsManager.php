@@ -86,7 +86,7 @@ class UploadsManager
     public function saveFile(
         string $path,
         string $content,
-        UploadedFile $file = null,
+        ?UploadedFile $file = null,
         string $visibility = 'public'
     ): bool {
         $storage = Storage::disk(RvMedia::getConfig('disk'));
@@ -96,16 +96,35 @@ class UploadsManager
         }
 
         if (! RvMedia::isChunkUploadEnabled() || ! $file) {
-            return $storage->put($this->cleanFolder($path), $content);
+            try {
+                return $storage->put($this->cleanFolder($path), $content, ['visibility' => $visibility]);
+            } catch (Exception|FilesystemException) {
+                return $storage->put($this->cleanFolder($path), $content);
+            }
         }
 
-        $currentChunksPath = RvMedia::getConfig('chunk.storage.chunks') . '/' . $file->getFilename();
+        $chunkFilename = $file->getFilename();
+        $currentChunksPath = RvMedia::getConfig('chunk.storage.chunks') . '/' . $chunkFilename;
         $disk = Storage::disk(RvMedia::getConfig('chunk.storage.disk'));
+
+        if (! $chunkFilename || ! $disk->fileExists($currentChunksPath)) {
+            return $storage->put($this->cleanFolder($path), $content, ['visibility' => $visibility]);
+        }
 
         try {
             $stream = $disk->getDriver()->readStream($currentChunksPath);
 
-            if ($result = Storage::writeStream($path, $stream, ['visibility' => $visibility])) {
+            try {
+                $result = Storage::writeStream($path, $stream, ['visibility' => $visibility]);
+            } catch (Exception|FilesystemException) {
+                $result = Storage::writeStream($path, $stream);
+            }
+
+            if (is_resource($stream)) {
+                @fclose($stream);
+            }
+
+            if ($result) {
                 $disk->delete($currentChunksPath);
             }
         } catch (Exception|FilesystemException) {

@@ -4,7 +4,7 @@
     data-wow-delay=".2s"
 >
     <div class="container">
-        @if (count($products))
+        @if ($products->isNotEmpty())
             <div class="row">
                 <div class="col-12">
                     <form
@@ -29,6 +29,8 @@
                                         @php($product = $products->find($item->id))
 
                                         @continue(! $product)
+
+                                        @php($shouldShowPrice = (! EcommerceHelper::hideProductPrice() || EcommerceHelper::isCartEnabled()) && (! EcommerceHelper::hideProductPriceWhenZero() || $item->price > 0))
 
                                         <tr>
                                             <input
@@ -76,12 +78,16 @@
                                                         'plugins/ecommerce::themes.includes.cart-item-options-extras',
                                                         ['options' => $item->options]
                                                     )
+
+                                                    {!! apply_filters('ecommerce_cart_after_item_content', null, $item) !!}
                                                 </div>
                                             </td>
                                             <td class="product-price" data-title="{{ __('Price') }}">
-                                                <span class="amount">{{ format_price($item->price) }}</span>
-                                                @if ($item->price < $product->price)
-                                                    <small><del>{{ format_price($product->price) }}</del></small>
+                                                @if ($shouldShowPrice)
+                                                    <span class="amount">{{ format_price($item->price) }}</span>
+                                                    @if ($item->price < $product->price)
+                                                        &nbsp;<small><del>{{ format_price($product->price) }}</del></small>
+                                                    @endif
                                                 @endif
                                             </td>
                                             <td class="product-quantity" data-title="{{ __('Quantity') }}">
@@ -98,14 +104,27 @@
                                                 <span class="cart-plus">+</span>
                                             </td>
                                             <td class="product-subtotal" data-title="{{ __('Total') }}">
-                                                <span
-                                                    class="amount">{{ format_price($item->price * $item->qty) }}</span>
+                                                @if ($shouldShowPrice)
+                                                    <span
+                                                        class="amount">{{ format_price($item->price * $item->qty) }}</span>
+                                                @endif
                                             </td>
                                             <td class="product-remove" data-title="{{ __('Remove') }}">
                                                 <a
                                                     class="remove-cart-item"
                                                     data-url="{{ route('public.cart.remove', $item->rowId) }}"
                                                     href="#"
+                                                    data-product-id="{{ $product->id }}"
+                                                    data-product-name="{{ $product->name }}"
+                                                    data-product-price="{{ $product->price }}"
+                                                    data-product-sku="{{ $product->sku }}"
+                                                    data-product-quantity="{{ $item->qty }}"
+                                                    @if($product->brand)
+                                                    data-product-brand="{{ $product->brand->name }}"
+                                                    @endif
+                                                    @if($product->categories->isNotEmpty())
+                                                    data-product-categories="{{ $product->categories->pluck('name')->implode(',') }}"
+                                                    @endif
                                                 >
                                                     <i class="fa fa-times"></i>
                                                 </a>
@@ -128,7 +147,7 @@
                                             placeholder="{{ __('Coupon code') }}"
                                         >
                                         <button
-                                            class="tp-btn tp-color-btn banner-animation btn-apply-coupon-code"
+                                            class="tp-btn tp-color-btn btn-apply-coupon-code"
                                             data-url="{{ route('public.coupon.apply') }}"
                                             type="button"
                                         >{{ __('Apply Coupon') }}</button>
@@ -149,11 +168,11 @@
                                         @endif
                                         @if ($couponDiscountAmount > 0 && session('applied_coupon_code'))
                                             <li>
-                                                {!! __('Coupon code: :code', ['code' => '<strong>' . session('applied_coupon_code') . '</strong>']) !!}
+                                                {!! BaseHelper::clean(__('Coupon code: :code', ['code' => '<strong>' . session('applied_coupon_code') . '</strong>'])) !!}&nbsp;
                                                 <small>(<a
                                                         class="btn-remove-coupon-code"
                                                         data-loading-text="{{ __('Removing...') }}"
-                                                        href="{{ route('public.coupon.remove') }}"
+                                                        href="#" data-url="{{ route('public.coupon.remove') }}"
                                                     >{{ __('Remove') }}</a>)</small>
 
                                                 <span>{{ format_price($couponDiscountAmount) }}</span>

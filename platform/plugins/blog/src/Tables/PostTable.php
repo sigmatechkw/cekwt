@@ -11,6 +11,7 @@ use Botble\Table\Actions\DeleteAction;
 use Botble\Table\Actions\EditAction;
 use Botble\Table\BulkActions\DeleteBulkAction;
 use Botble\Table\BulkChanges\CreatedAtBulkChange;
+use Botble\Table\BulkChanges\IsFeaturedBulkChange;
 use Botble\Table\BulkChanges\NameBulkChange;
 use Botble\Table\BulkChanges\SelectBulkChange;
 use Botble\Table\BulkChanges\StatusBulkChange;
@@ -80,6 +81,13 @@ class PostTable extends TableAbstract
                         return Html::link($url, $column->getItem()->author_name, ['target' => '_blank']);
                     })
                     ->withEmptyState(),
+                FormattedColumn::make('views')
+                    ->title(trans('plugins/blog::posts.views'))
+                    ->width(80)
+                    ->alignCenter()
+                    ->getValueUsing(function (FormattedColumn $column) {
+                        return number_format($column->getItem()->views);
+                    }),
                 CreatedAtColumn::make(),
                 StatusColumn::make(),
             ])
@@ -95,6 +103,7 @@ class PostTable extends TableAbstract
                     ->title(trans('plugins/blog::posts.category'))
                     ->searchable()
                     ->choices(fn () => Category::query()->pluck('name', 'id')->all()),
+                IsFeaturedBulkChange::make(),
             ])
             ->queryUsing(function (Builder $query) {
                 return $query
@@ -113,6 +122,7 @@ class PostTable extends TableAbstract
                         'updated_at',
                         'author_id',
                         'author_type',
+                        'views',
                     ]);
             })
             ->onAjax(function (self $table) {

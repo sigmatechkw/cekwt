@@ -15,6 +15,7 @@ use Botble\Media\Models\MediaFile;
 use Botble\Media\Models\MediaFolder;
 use Botble\Media\Services\ThumbnailService;
 use Botble\Media\Services\UploadsManager;
+use Botble\Media\Supports\ResponsiveImageSrcset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -34,7 +35,6 @@ use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 use Intervention\Image\Encoders\AutoEncoder;
 use Intervention\Image\Encoders\WebpEncoder;
 use Intervention\Image\ImageManager;
-use League\Flysystem\UnableToRetrieveMetadata;
 use League\Flysystem\UnableToWriteFile;
 use Symfony\Component\Mime\MimeTypes;
 use Throwable;
@@ -66,9 +66,13 @@ class RvMedia
             'download' => route('media.download'),
             'upload_file' => route('media.files.upload'),
             'get_breadcrumbs' => route('media.breadcrumbs'),
+            'folder_list' => route('media.folder_list'),
+            'folder_tree' => route('media.folder_tree'),
             'global_actions' => route('media.global_actions'),
             'media_upload_from_editor' => route('media.files.upload.from.editor'),
             'download_url' => route('media.download_url'),
+            'folder_permissions' => route('media.folder_permissions.index', ['folder' => '__FOLDER_ID__']),
+            'folder_permissions_users' => route('media.folder_permissions.users'),
         ];
     }
 
@@ -238,6 +242,10 @@ class RvMedia
     {
         $path = $path ? trim($path) : $path;
 
+        if (empty($path)) {
+            return '';
+        }
+
         if (Str::contains($path, ['http://', 'https://'])) {
             return $path;
         }
@@ -250,6 +258,21 @@ class RvMedia
             }
 
             return str_replace('.digitaloceanspaces.com', '.cdn.digitaloceanspaces.com', Storage::url($path));
+        } elseif ($this->getMediaDriver() === 'wasabi' && (int) setting('media_wasabi_cdn_enabled')) {
+            $customDomain = setting('media_wasabi_cdn_custom_domain');
+
+            if ($customDomain) {
+                return $customDomain . '/' . ltrim($path, '/');
+            }
+        } elseif ($this->getMediaDriver() === 'backblaze' && (int) setting('media_backblaze_cdn_enabled')) {
+            $customDomain = setting('media_backblaze_cdn_custom_domain');
+            $currentEndpoint = setting('media_backblaze_endpoint');
+
+            if ($customDomain) {
+                return $customDomain . '/' . ltrim($path, '/');
+            }
+
+            return str_replace($currentEndpoint, $customDomain, Storage::url($path));
         }
 
         return Storage::url($path);
@@ -380,10 +403,18 @@ class RvMedia
     ) {
         $validator = Validator::make($request->all(), [
             'upload' => $this->imageValidationRule(),
+        ], [
+            'upload.required' => trans('core/media::media.validation.uploaded_file_required'),
+            'upload.image' => trans('core/media::media.validation.uploaded_file_invalid_type'),
+            'upload.mimes' => trans('core/media::media.validation.uploaded_file_invalid_type'),
+        ], [
+            'upload' => trans('core/media::media.validation.attributes.uploaded_file'),
         ]);
 
         if ($validator->fails()) {
-            return response('<script>alert("' . trans('core/media::media.can_not_detect_file_type') . '")</script>')
+            $errorMessage = $validator->getMessageBag()->first();
+
+            return response('<script>alert("' . addslashes($errorMessage) . '")</script>')
                 ->header('Content-Type', 'text/html');
         }
 
@@ -412,6 +443,14 @@ class RvMedia
             ->header('Content-Type', 'text/html');
     }
 
+    protected function getCustomS3Path(): string
+    {
+        $customPath = trim(setting('media_s3_path', $this->getConfig('custom_s3_path')), '/');
+        $customPath = apply_filters('core_media_custom_s3_path', $customPath);
+
+        return $customPath ? $customPath . '/' : '';
+    }
+
     public function handleUpload(
         ?UploadedFile $fileUpload,
         int|string|null $folderId = 0,
@@ -436,13 +475,43 @@ class RvMedia
 
         $allowedMimeTypes = $this->getConfig('allowed_mime_types');
 
+        $allowedToUploadAnyFileTypes = AdminHelper::isInAdmin(true) && $this->getConfig(
+            'allowed_admin_to_upload_any_file_types',
+            false
+        );
+
         if (! $this->isChunkUploadEnabled()) {
             if (! $skipValidation) {
+                $rules = ['required'];
+
+                if (! $allowedToUploadAnyFileTypes) {
+                    $allowedExtensions = explode(',', $allowedMimeTypes);
+                    $rules[] = ValidationFile::types($allowedExtensions);
+                }
+
                 $validator = Validator::make(['uploaded_file' => $fileUpload], [
-                    'uploaded_file' => ['required', ValidationFile::types(explode(',', $allowedMimeTypes))],
+                    'uploaded_file' => $rules,
+                ], [
+                    'uploaded_file.required' => trans('core/media::media.validation.uploaded_file_required'),
+                    'uploaded_file.file' => trans('core/media::media.validation.uploaded_file_invalid_type'),
+                    'uploaded_file.types' => trans('core/media::media.validation.uploaded_file_invalid_type'),
+                    'uploaded_file.uploaded' => $fileUpload instanceof UploadedFile
+                        ? $this->getUploadErrorMessage($fileUpload->getError())
+                        : trans('core/media::media.validation.upload_network_error'),
+                ], [
+                    'uploaded_file' => trans('core/media::media.validation.attributes.uploaded_file'),
                 ]);
 
-                if ($validator->fails()) {
+                if (
+                    $validator->fails()
+                    && ! $allowedToUploadAnyFileTypes
+                    && in_array('avif', $allowedExtensions)
+                    && $this->isAvifFile($fileUpload->getRealPath())
+                ) {
+                    $validator = null;
+                }
+
+                if ($validator?->fails()) {
                     return [
                         'error' => true,
                         'message' => $validator->getMessageBag()->first(),
@@ -466,23 +535,38 @@ class RvMedia
 
             $maxSize = $this->getServerConfigMaxUploadFileSize();
 
-            if ($fileUpload->getSize() / 1024 > (int) $maxSize) {
+            if ($maxSize > 0 && $fileUpload->getSize() > $maxSize) {
                 return [
                     'error' => true,
                     'message' => trans('core/media::media.file_too_big_readable_size', [
-                        'size' => BaseHelper::humanFilesize($maxSize),
+                        'size' => BaseHelper::humanFilesize((int) $maxSize),
                     ]),
                 ];
             }
         }
 
+        $extraValidation = apply_filters('core_media_extra_validation', [], $fileUpload);
+
+        if ($extraValidation && Arr::get($extraValidation, 'error')) {
+            return [
+                'error' => true,
+                'message' => $extraValidation['message'],
+            ];
+        }
+
         try {
             $fileExtension = $fileUpload->getClientOriginalExtension() ?: $fileUpload->guessExtension();
 
-            if (! $skipValidation && ! in_array(strtolower($fileExtension), explode(',', $allowedMimeTypes))) {
+            $fileExtension = strtolower($fileExtension);
+
+            if (
+                ! $skipValidation
+                && ! in_array(strtolower($fileExtension), explode(',', $allowedMimeTypes))
+                && ! $allowedToUploadAnyFileTypes
+            ) {
                 return [
                     'error' => true,
-                    'message' => trans('core/media::media.can_not_detect_file_type'),
+                    'message' => trans('core/media::media.validation.uploaded_file_invalid_type'),
                 ];
             }
 
@@ -499,7 +583,11 @@ class RvMedia
 
             $file = new MediaFile();
 
-            $fileName = apply_filters('core_media_upload_filename', File::name($fileUpload->getClientOriginalName()), $fileUpload);
+            $fileName = apply_filters(
+                'core_media_upload_filename',
+                File::name($fileUpload->getClientOriginalName()),
+                $fileUpload
+            );
 
             $file->name = MediaFile::createName($fileName, $folderId);
 
@@ -508,7 +596,7 @@ class RvMedia
             $fileName = MediaFile::createSlug(
                 $file->name,
                 $fileExtension,
-                Storage::path($folderPath ?: '')
+                $folderPath ?: ''
             );
 
             $filePath = $fileName;
@@ -517,26 +605,40 @@ class RvMedia
                 $filePath = $folderPath . '/' . $filePath;
             }
 
+            if ($this->getMediaDriver() === 's3') {
+                $filePath = $this->getCustomS3Path() . $filePath;
+            }
+
             if ($this->canGenerateThumbnails($fileUpload->getMimeType())) {
-                if (setting('media_keep_original_file_size_and_quality')) {
-                    $content = File::get($fileUpload->getRealPath());
-                } else {
-                    try {
-                        $encoder = new AutoEncoder();
+                $originalFilePath = $filePath;
 
-                        if (
-                            in_array($fileExtension, ['jpg', 'jpeg', 'png'])
-                            && setting('media_convert_image_to_webp', false)
-                        ) {
-                            $encoder = new WebpEncoder();
+                try {
+                    $imageQuality = $this->getImageQuality();
+                    $encoder = new AutoEncoder(quality: $imageQuality);
+                    $shouldConvertToWebp = in_array($fileExtension, ['jpg', 'jpeg', 'png'])
+                        && setting('media_convert_image_to_webp', false);
 
-                            $filePath = File::dirname($filePath) . '/' . File::name($filePath) . '.webp';
+                    $keepOriginalQuality = setting('media_keep_original_file_size_and_quality');
+
+                    if ($shouldConvertToWebp) {
+                        $encoder = new WebpEncoder(quality: $imageQuality);
+
+                        if ($keepOriginalQuality) {
+                            $encoder = new WebpEncoder(quality: 100);
                         }
 
+                        $dirName = File::dirname($filePath);
+                        $filePath = ($dirName === '.' ? '' : $dirName . '/') . File::name($filePath) . '.webp';
+                    }
+
+                    if ($keepOriginalQuality && ! $shouldConvertToWebp) {
+                        $content = File::get($fileUpload->getRealPath());
+                    } else {
                         $image = $this->imageManager()->read($fileUpload->getRealPath());
 
                         if (
-                            in_array($fileExtension, ['jpg', 'jpeg', 'png', 'webp'])
+                            ! $keepOriginalQuality
+                            && in_array($fileExtension, ['jpg', 'jpeg', 'png', 'webp'])
                             && setting('media_reduce_large_image_size', false)
                         ) {
                             $maxWith = setting('media_image_max_width');
@@ -548,12 +650,14 @@ class RvMedia
                             }
                         }
 
-                        $content = $image->encode($encoder);
-                    } catch (Throwable) {
-                        $content = File::get($fileUpload->getRealPath());
-
-                        $filePath = File::dirname($filePath) . '/' . File::name($filePath) . '.' . $fileExtension;
+                        $content = (string) $image->encode($encoder);
                     }
+                } catch (Throwable $exception) {
+                    BaseHelper::logError($exception);
+
+                    $content = File::get($fileUpload->getRealPath());
+
+                    $filePath = $originalFilePath;
                 }
             } else {
                 $content = File::get($fileUpload->getRealPath());
@@ -567,7 +671,7 @@ class RvMedia
             $file->alt = $file->name;
             $file->size = $data['size'] ?: $fileUpload->getSize();
 
-            $file->mime_type = $data['mime_type'];
+            $file->mime_type = $data['mime_type'] ?: 'application/octet-stream';
             $file->folder_id = $folderId;
             $file->user_id = Auth::guard()->check() ? Auth::guard()->id() : 0;
             $file->options = $request->input('options', []);
@@ -604,7 +708,7 @@ class RvMedia
         } catch (Throwable $exception) {
             return [
                 'error' => true,
-                'message' => $exception->getMessage(),
+                'message' => $exception->getMessage() ?: trans('core/media::media.validation.upload_network_error'),
             ];
         }
     }
@@ -638,7 +742,7 @@ class RvMedia
         return round($size);
     }
 
-    public function generateThumbnails(MediaFile $file, ?UploadedFile $fileUpload = null): bool
+    public function generateThumbnails(MediaFile $file, ?UploadedFile $fileUpload = null, bool $overrideExisting = false): bool
     {
         if (! $file->canGenerateThumbnails()) {
             return false;
@@ -677,9 +781,11 @@ class RvMedia
                 }
             }
 
-            $thumbnailPath = File::name($file->url) . '-' . $size . '.' . File::extension($file->url);
+            $thumbnailFileName = File::name($file->url) . '-' . $size . '.' . File::extension($file->url);
+            $dirName = File::dirname($file->url);
+            $thumbnailPath = ($dirName === '.' || ! $dirName) ? $thumbnailFileName : $dirName . '/' . $thumbnailFileName;
 
-            if (! $this->isUsingCloud() && Storage::exists($thumbnailPath)) {
+            if (! $overrideExisting && ! $this->isUsingCloud() && Storage::exists($thumbnailPath)) {
                 continue;
             }
 
@@ -687,7 +793,7 @@ class RvMedia
                 ->setImage($fileUpload)
                 ->setSize($readableSize[0], $readableSize[1])
                 ->setDestinationPath(File::dirname($file->url))
-                ->setFileName($thumbnailPath)
+                ->setFileName($thumbnailFileName)
                 ->save();
         }
 
@@ -708,18 +814,40 @@ class RvMedia
 
         $watermarkPath = $this->getRealPath($watermarkImage);
 
-        if ($this->isUsingCloud()) {
-            $watermark = $this->imageManager()->read(file_get_contents($watermarkPath));
+        try {
+            if ($this->isUsingCloud()) {
+                $watermarkContent = null;
+                $imageContent = null;
 
-            $imageSource = $this->imageManager()->read(file_get_contents($this->getRealPath($image)));
-        } else {
-            if (! File::exists($watermarkPath)) {
-                return false;
+                try {
+                    $watermarkContent = Storage::get($watermarkImage);
+                    $imageContent = Storage::get($image);
+                } catch (Throwable $exception) {
+                    BaseHelper::logError($exception);
+
+                    $watermarkContent = @file_get_contents($watermarkPath);
+                    $imageContent = @file_get_contents($this->getRealPath($image));
+                }
+
+                if (! $watermarkContent || ! $imageContent) {
+                    return false;
+                }
+
+                $watermark = $this->imageManager()->read($watermarkContent);
+                $imageSource = $this->imageManager()->read($imageContent);
+            } else {
+                if (! File::exists($watermarkPath)) {
+                    return false;
+                }
+
+                $watermark = $this->imageManager()->read($watermarkPath);
+
+                $imageSource = $this->imageManager()->read($this->getRealPath($image));
             }
+        } catch (Throwable $exception) {
+            BaseHelper::logError($exception);
 
-            $watermark = $this->imageManager()->read($watermarkPath);
-
-            $imageSource = $this->imageManager()->read($this->getRealPath($image));
+            return false;
         }
 
         // 10% less than an actual image (play with this value)
@@ -738,9 +866,18 @@ class RvMedia
         $imageSource->place(
             $watermark,
             setting('media_watermark_position', $this->getConfig('watermark.position')),
-            (int) setting('media_watermark_position_x', setting('watermark_position_x') ?: $this->getConfig('watermark.x')),
-            (int) setting('media_watermark_position_y', setting('watermark_position_y') ?: $this->getConfig('watermark.y')),
-            (int) setting('media_watermark_opacity', setting('watermark_opacity') ?: $this->getConfig('watermark.opacity'))
+            (int) setting(
+                'media_watermark_position_x',
+                setting('watermark_position_x') ?: $this->getConfig('watermark.x')
+            ),
+            (int) setting(
+                'media_watermark_position_y',
+                setting('watermark_position_y') ?: $this->getConfig('watermark.y')
+            ),
+            (int) setting(
+                'media_watermark_opacity',
+                setting('watermark_opacity') ?: $this->getConfig('watermark.opacity')
+            )
         );
 
         $destinationPath = sprintf(
@@ -749,23 +886,96 @@ class RvMedia
             File::name($image) . '.' . File::extension($image)
         );
 
-        $this->uploadManager->saveFile($destinationPath, $imageSource->encode(new AutoEncoder()));
+        $encodedImage = $imageSource->encode(new AutoEncoder(quality: $this->getImageQuality()));
+
+        $this->uploadManager->saveFile($destinationPath, (string) $encodedImage);
 
         return true;
     }
 
-    public function getRealPath(?string $url): string
+    public function getRealPath(?string $url): ?string
     {
-        $path = $this->isUsingCloud()
-            ? Storage::url($url)
-            : Storage::path($url);
+        if (empty($url)) {
+            return null;
+        }
 
-        return Arr::first(explode('?v=', $path));
+        try {
+            $path = $this->isUsingCloud()
+                ? Storage::url($url)
+                : Storage::path($url);
+
+            return Arr::first(explode('?v=', $path));
+        } catch (Throwable $exception) {
+            logger()->error('Failed to get real path: ' . $exception->getMessage(), [
+                'url' => $url,
+                'exception' => $exception,
+            ]);
+
+            return null;
+        }
     }
 
     public function isImage(string $mimeType): bool
     {
         return Str::startsWith($mimeType, 'image/');
+    }
+
+    public function isExecutableFileExtension(string $extension): bool
+    {
+        $dangerousExtensions = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar',
+            'asp', 'aspx', 'jsp', 'jspx',
+            'cgi', 'pl', 'py', 'rb',
+            'sh', 'bash', 'zsh', 'bat', 'cmd', 'com', 'ps1',
+            'exe', 'dll', 'msi',
+            'htaccess', 'htpasswd',
+        ];
+
+        return in_array(strtolower($extension), $dangerousExtensions);
+    }
+
+    public function getUploadErrorMessage(int $errorCode): string
+    {
+        return match ($errorCode) {
+            UPLOAD_ERR_INI_SIZE => trans('core/media::media.validation.upload_err_ini_size', [
+                'size' => BaseHelper::humanFilesize((int) $this->getServerConfigMaxUploadFileSize()),
+            ]),
+            UPLOAD_ERR_FORM_SIZE => trans('core/media::media.validation.upload_err_form_size'),
+            UPLOAD_ERR_PARTIAL => trans('core/media::media.validation.upload_err_partial'),
+            UPLOAD_ERR_NO_FILE => trans('core/media::media.validation.uploaded_file_required'),
+            UPLOAD_ERR_NO_TMP_DIR => trans('core/media::media.validation.upload_err_no_tmp_dir'),
+            UPLOAD_ERR_CANT_WRITE => trans('core/media::media.validation.upload_err_cant_write'),
+            UPLOAD_ERR_EXTENSION => trans('core/media::media.validation.upload_err_extension'),
+            default => trans('core/media::media.validation.upload_err_unknown', ['code' => $errorCode]),
+        };
+    }
+
+    public function isAvifFile(string $path): bool
+    {
+        if (! is_file($path)) {
+            return false;
+        }
+
+        $handle = @fopen($path, 'rb');
+
+        if (! $handle) {
+            return false;
+        }
+
+        $header = @fread($handle, 12);
+        fclose($handle);
+
+        if ($header === false) {
+            return false;
+        }
+
+        if (strlen($header) < 12) {
+            return false;
+        }
+
+        // AVIF files have "ftyp" at bytes 4-7 and "avif" or "avis" at bytes 8-11
+        return substr($header, 4, 4) === 'ftyp'
+            && in_array(substr($header, 8, 4), ['avif', 'avis', 'mif1']);
     }
 
     public function isUsingCloud(): bool
@@ -786,30 +996,59 @@ class RvMedia
             ];
         }
 
-        $info = pathinfo($url);
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        $host = parse_url($url, PHP_URL_HOST);
+
+        if (! in_array($scheme, ['http', 'https']) || ! $host) {
+            return [
+                'error' => true,
+                'message' => trans('core/media::media.url_invalid'),
+            ];
+        }
+
+        $ip = gethostbyname($host);
+
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return [
+                'error' => true,
+                'message' => trans('core/media::media.url_invalid'),
+            ];
+        }
+
+        $urlPath = parse_url($url, PHP_URL_PATH) ?: $url;
+        $info = pathinfo($urlPath);
 
         try {
-            $response = Http::withoutVerifying()->get($url);
+            $response = Http::get($url);
 
             if ($response->failed() || ! $response->body()) {
                 return [
                     'error' => true,
-                    'message' => $response->reason() ?: trans('core/media::media.unable_download_image_from', ['url' => $url]),
+                    'message' => $response->reason() ?: trans(
+                        'core/media::media.unable_download_image_from',
+                        ['url' => $url]
+                    ),
                 ];
             }
 
             $contents = $response->body();
         } catch (Throwable $exception) {
+            logger()->error('Failed to download file from URL: ' . $exception->getMessage(), [
+                'url' => $url,
+                'exception' => $exception,
+            ]);
+
             return [
                 'error' => true,
-                'message' => $exception->getMessage(),
+                'message' => $exception->getMessage() ?: trans('core/media::media.validation.upload_network_error'),
             ];
         }
 
         $path = '/tmp';
         File::ensureDirectoryExists($path);
 
-        $path = $path . '/' . Str::limit($info['basename'], 50, '');
+        $basename = $info['basename'] ?: Str::random(20);
+        $path = $path . '/' . Str::limit($basename, 50, '');
         file_put_contents($path, $contents);
 
         $fileUpload = $this->newUploadedFile($path, $defaultMimetype);
@@ -852,7 +1091,15 @@ class RvMedia
 
     protected function newUploadedFile(string $path, ?string $defaultMimeType = null): UploadedFile
     {
-        $mimeType = $this->getMimeType($path);
+        $mimeType = null;
+
+        if (file_exists($path)) {
+            $mimeType = File::mimeType($path) ?: null;
+        }
+
+        if (empty($mimeType)) {
+            $mimeType = $this->getMimeType($path);
+        }
 
         if (empty($mimeType)) {
             $mimeType = $defaultMimeType;
@@ -908,14 +1155,73 @@ class RvMedia
         return $this;
     }
 
-    public function getMimeType(string $url): ?string
+    public function getMimeType(?string $url): ?string
     {
         if (! $url) {
             return null;
         }
 
         try {
+            // For remote URLs (like S3), determine MIME type from extension
+            if (Str::contains($url, ['http://', 'https://'])) {
+                $fileExtension = pathinfo($url, PATHINFO_EXTENSION);
+
+                if (! $fileExtension) {
+                    $realPath = $this->getRealPath($url);
+
+                    if (empty($realPath)) {
+                        return null;
+                    }
+
+                    $fileExtension = File::extension($realPath);
+                }
+
+                if (! $fileExtension) {
+                    return null;
+                }
+
+                if ($fileExtension == 'jfif') {
+                    return 'image/jpeg';
+                }
+
+                $mimeType = match (strtolower($fileExtension)) {
+                    'ico' => 'image/x-icon',
+                    'png' => 'image/png',
+                    'jpg', 'jpeg' => 'image/jpeg',
+                    'gif' => 'image/gif',
+                    'svg' => 'image/svg+xml',
+                    'webp' => 'image/webp',
+                    'pdf' => 'application/pdf',
+                    'doc' => 'application/msword',
+                    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'xls' => 'application/vnd.ms-excel',
+                    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'ppt' => 'application/vnd.ms-powerpoint',
+                    'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                    'mp3' => 'audio/mpeg',
+                    'mp4' => 'video/mp4',
+                    'zip' => 'application/zip',
+                    'rar' => 'application/x-rar-compressed',
+                    'txt' => 'text/plain',
+                    'csv' => 'text/csv',
+                    default => null,
+                };
+
+                if (! $mimeType) {
+                    $mimeTypeDetection = new MimeTypes();
+
+                    return Arr::first($mimeTypeDetection->getMimeTypes($fileExtension)) ?: 'application/octet-stream';
+                }
+
+                return $mimeType;
+            }
+
+            // For local files, use the existing method
             $realPath = $this->getRealPath($url);
+
+            if (empty($realPath)) {
+                return null;
+            }
 
             $fileExtension = File::extension($realPath);
 
@@ -929,8 +1235,13 @@ class RvMedia
 
             $mimeTypeDetection = new MimeTypes();
 
-            return Arr::first($mimeTypeDetection->getMimeTypes($fileExtension));
-        } catch (UnableToRetrieveMetadata) {
+            return Arr::first($mimeTypeDetection->getMimeTypes($fileExtension)) ?: 'application/octet-stream';
+        } catch (Throwable $exception) {
+            logger()->error('Failed to get MIME type: ' . $exception->getMessage(), [
+                'url' => $url,
+                'exception' => $exception,
+            ]);
+
             return null;
         }
     }
@@ -945,7 +1256,19 @@ class RvMedia
             return false;
         }
 
-        return $this->isImage($mimeType) && ! in_array($mimeType, ['image/svg+xml', 'image/x-icon']);
+        if (! $this->isImage($mimeType) || in_array($mimeType, ['image/svg+xml', 'image/x-icon'])) {
+            return false;
+        }
+
+        if ($mimeType === 'image/avif') {
+            if ($this->getImageProcessingLibrary() === 'imagick' && extension_loaded('imagick')) {
+                return ! empty(\Imagick::queryFormats('AVIF'));
+            }
+
+            return function_exists('imageavif');
+        }
+
+        return true;
     }
 
     public function createFolder(string $folderSlug, int|string|null $parentId = 0, bool $force = false): int|string
@@ -993,10 +1316,10 @@ class RvMedia
 
     public function isChunkUploadEnabled(): bool
     {
-        return (int) $this->getConfig('chunk.enabled') == 1;
+        return (bool) setting('media_chunk_enabled', (int) $this->getConfig('chunk.enabled') == 1);
     }
 
-    public function getConfig(?string $key = null, string|null|array $default = null)
+    public function getConfig(?string $key = null, bool|string|null|array $default = null)
     {
         $configs = config('core.media.media');
 
@@ -1015,6 +1338,11 @@ class RvMedia
     public function turnOffAutomaticUrlTranslationIntoLatin(): bool
     {
         return (int) setting('media_turn_off_automatic_url_translation_into_latin', 0) == 1;
+    }
+
+    public function getImageQuality(): int
+    {
+        return (int) setting('media_image_quality', 75);
     }
 
     public function getImageProcessingLibrary(): string
@@ -1179,8 +1507,16 @@ class RvMedia
                 'region' => $config['region'],
                 'bucket' => $config['bucket'],
                 'url' => $config['url'],
-                'endpoint' => str_starts_with($config['endpoint'], 'https://') ? $config['endpoint'] : 'https://' . $config['endpoint'],
+                'endpoint' => str_starts_with(
+                    $config['endpoint'],
+                    'https://'
+                ) ? $config['endpoint'] : 'https://' . $config['endpoint'],
                 'use_path_style_endpoint' => (bool) $config['use_path_style_endpoint'],
+                'options' => [
+                    'StorageClass' => 'STANDARD',
+                ],
+                'request_checksum_calculation' => 'when_required',
+                'response_checksum_validation' => 'when_required',
             ],
         ]);
     }
@@ -1200,6 +1536,8 @@ class RvMedia
 
         $defaultImageUrl = $this->getDefaultImage(false, $size);
 
+        $originalUrl = $url;
+
         if (! $url) {
             $url = $defaultImageUrl;
         }
@@ -1215,11 +1553,38 @@ class RvMedia
             ...$attributes,
         ];
 
-        if (Str::startsWith($url, ['data:image/png;base64,', 'data:image/jpeg;base64,', 'http://', 'https://'])) {
+        // Auto-inject srcset/sizes from registered RvMedia sizes with the same aspect ratio
+        // (WordPress-style responsive images). Respect author-provided srcset/sizes.
+        if (
+            $size
+            && $originalUrl
+            && ! isset($attributes['srcset'])
+            && ! Str::startsWith($url, ['data:image/'])
+        ) {
+            $srcset = ResponsiveImageSrcset::build($originalUrl, $size);
+            if ($srcset) {
+                $attributes['srcset'] = $srcset;
+                if (! isset($attributes['sizes'])) {
+                    $sizes = ResponsiveImageSrcset::sizes($size);
+                    if ($sizes) {
+                        $attributes['sizes'] = $sizes;
+                    }
+                }
+            }
+        }
+
+        if (Str::startsWith($url, ['data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/jpg;base64,'])) {
             return Html::tag('img', '', [...$attributes, 'src' => $url, 'alt' => $alt]);
         }
 
-        return apply_filters('core_media_image', Html::image($url, $alt, $attributes, $secure), $url, $alt, $attributes, $secure);
+        return apply_filters(
+            'core_media_image',
+            Html::image($url, $alt, $attributes, $secure),
+            $url,
+            $alt,
+            $attributes,
+            $secure
+        );
     }
 
     public function getFileSize(?string $path): ?string
@@ -1267,7 +1632,10 @@ class RvMedia
                     $file->url
                 );
 
-                $this->generateThumbnails($file);
+                try {
+                    $this->generateThumbnails($file);
+                } catch (Throwable) {
+                }
             }
         }
 
@@ -1350,5 +1718,46 @@ class RvMedia
             && ! App::runningInConsole()
             && auth()->check()
             && ! auth()->user()->isSuperUser();
+    }
+
+    public function responseDownloadFile(string $filePath)
+    {
+        $fileName = File::basename($filePath);
+        $realPath = $this->getRealPath($filePath);
+
+        if (! $this->isUsingCloud()) {
+            if (! File::exists($realPath)) {
+                return RvMedia::responseError(trans('core/media::media.file_not_exists'));
+            }
+
+            return response()->download($realPath, $fileName);
+        }
+
+        try {
+            $content = Storage::get($filePath);
+        } catch (Throwable $exception) {
+            BaseHelper::logError($exception);
+
+            $content = Http::withoutVerifying()->get($realPath)->body();
+        }
+
+        return response()->make($content, 200, [
+            'Content-Type' => $this->getMimeType($filePath),
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"; filename*=UTF-8\'\'' . rawurlencode($fileName),
+            'Cache-Control' => 'no-cache, must-revalidate',
+        ]);
+    }
+
+    public function getAvailableDrivers(): array
+    {
+        return apply_filters('core_media_drivers', [
+            'public' => trans('core/setting::setting.media.local_disk'),
+            's3' => 'Amazon S3',
+            'r2' => 'Cloudflare R2',
+            'do_spaces' => 'DigitalOcean Spaces',
+            'wasabi' => 'Wasabi',
+            'bunnycdn' => 'BunnyCDN',
+            'backblaze' => 'Backblaze B2',
+        ]);
     }
 }

@@ -1,10 +1,10 @@
-<header>
+<header class="main-header">
     {!! Theme::partial('header-top') !!}
-    <div class="mainmenuarea d-none d-xl-block">
+    <div class="main-menu-area d-none d-xl-block">
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-lg-9">
-                    <div class="mainmenu d-flex align-items-center">
+                    <div class="main-menu d-flex align-items-center">
                         {!! Theme::partial('logo') !!}
                         <div class="mainmenu__main d-flex align-items-center p-relative">
                             <div class="main-menu">

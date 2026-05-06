@@ -15,7 +15,7 @@ return new class () extends Migration {
             });
         }
 
-        foreach (OrderReturn::get() as $orderReturn) {
+        foreach (OrderReturn::query()->get() as $orderReturn) {
             $orderReturn->code = get_order_code($orderReturn->id);
             $orderReturn->save();
         }

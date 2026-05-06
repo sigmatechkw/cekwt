@@ -72,6 +72,10 @@ class OrderSeeder extends BaseSeeder
 
         $storeLocatorsCount = $storeLocators->count();
 
+        if ($customers->isEmpty() || $productsCount === 0) {
+            return;
+        }
+
         $total = 20;
         for ($i = 0; $i < $total; $i++) {
             $customer = $customers->random();
@@ -81,7 +85,8 @@ class OrderSeeder extends BaseSeeder
                 continue;
             }
 
-            $orderProducts = $productsCount > 1 ? $products->random(rand(2, 4)) : $products->first();
+            $randomCount = min(rand(2, 4), $productsCount);
+            $orderProducts = $productsCount > 1 ? $products->random($randomCount) : $products->first();
 
             $groupedProducts = $this->group($orderProducts);
 
@@ -148,7 +153,7 @@ class OrderSeeder extends BaseSeeder
                         'product_name' => $groupedProduct->name,
                         'product_image' => $groupedProduct->image,
                         'qty' => $groupedProduct->qty,
-                        'weight' => $groupedProduct->weight * $groupedProduct->qty,
+                        'weight' => $groupedProduct->weight,
                         'price' => $groupedProduct->price ?: 1,
                         'tax_amount' => $groupedProduct->tax_amount,
                         'options' => [
@@ -244,9 +249,9 @@ class OrderSeeder extends BaseSeeder
                 /**
                  * @var StoreLocator|null $storeLocator
                  */
-                $storeLocator = $storeLocatorsCount > 1 ? $storeLocators->random(1) : null;
+                $storeLocator = $storeLocatorsCount >= 1 ? $storeLocators->random() : null;
 
-                if ($isAvailableShipping) {
+                if ($isAvailableShipping && ! Shipment::query()->where(['order_id' => $order->getKey()])->exists()) {
                     $shipment = Shipment::query()->create([
                         'status' => $shipmentStatus,
                         'order_id' => $order->getKey(),
@@ -255,7 +260,7 @@ class OrderSeeder extends BaseSeeder
                         'cod_amount' => $codAmount,
                         'cod_status' => $codStatus,
                         'price' => $order->shipping_amount,
-                        'store_id' => $storeLocator ? $storeLocator->id : 0,
+                        'store_id' => $storeLocator?->id,
                         'tracking_id' => 'JJD00' . rand(1111111, 99999999),
                         'shipping_company_name' => Arr::random(['DHL', 'AliExpress', 'GHN', 'FastShipping']),
                         'tracking_link' => 'https://mydhl.express.dhl/us/en/tracking.html#/track-by-reference',
@@ -343,7 +348,7 @@ class OrderSeeder extends BaseSeeder
                     'user_id' => 0,
                 ]);
 
-                if ($isMarketplace && $order->store->id && $order->store->customer->id) {
+                if ($isMarketplace && $order->store?->id && $order->store->customer->id) {
                     $customer = $order->store->customer;
                     $vendorInfo = $customer->vendorInfo;
 
@@ -353,7 +358,7 @@ class OrderSeeder extends BaseSeeder
                         $currentBalance = $customer->balance;
 
                         $amountByCurrency = $amount;
-                        $time = Carbon::now()->subMinutes(($order->id + 1) * 120 * rand(1, 10));
+                        $time = Carbon::now()->subMinutes(rand(120, 12000));
 
                         $data = [
                             'sub_amount' => $order->amount,

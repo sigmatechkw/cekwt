@@ -17,6 +17,10 @@
                 display: none;
             }
         }
+
+        &.ae-anno-announcement--dismissible {
+            padding-inline-end: 35px;
+        }
     }
 
     position: relative;

@@ -4,7 +4,13 @@
     $layout = in_array($page->template, ['default', 'full-width', 'blank']) ? $page->template : 'default';
 
     Theme::set('layout', $layout);
-    Theme::set('headerStyle', $page->getMetaData('header_style', true));
+
+    $headerStyle = $page->getMetaData('header_style', true);
+
+    if ($headerStyle) {
+        Theme::set('headerStyle', $headerStyle);
+    }
+
     Theme::set('pageTitle', $page->name);
 
     if ($bannerImage = $page->getMetaData('banner_image', true)) {

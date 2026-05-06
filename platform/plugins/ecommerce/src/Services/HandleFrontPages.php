@@ -13,15 +13,18 @@ use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Models\Brand;
 use Botble\Ecommerce\Models\Product;
 use Botble\Ecommerce\Models\ProductCategory;
+use Botble\Ecommerce\Models\ProductCollection;
 use Botble\Ecommerce\Models\ProductTag;
 use Botble\Ecommerce\Services\Products\GetProductService;
 use Botble\Ecommerce\Services\Products\ProductCrossSalePriceService;
+use Botble\Ecommerce\Services\Products\ProductUpSalePriceService;
 use Botble\Ecommerce\Services\Products\UpdateDefaultProductService;
 use Botble\Ecommerce\Traits\CheckReviewConditionTrait;
 use Botble\Media\Facades\RvMedia;
 use Botble\SeoHelper\Entities\Twitter\Card;
 use Botble\SeoHelper\Facades\SeoHelper;
 use Botble\SeoHelper\SeoOpenGraph;
+use Botble\Shortcode\Facades\Shortcode;
 use Botble\Slug\Models\Slug;
 use Botble\Theme\Facades\AdminBar;
 use Botble\Theme\Facades\Theme;
@@ -35,7 +38,8 @@ class HandleFrontPages
     use CheckReviewConditionTrait;
 
     public function __construct(
-        protected ProductCrossSalePriceService $productCrossSalePriceService
+        protected ProductCrossSalePriceService $productCrossSalePriceService,
+        protected ProductUpSalePriceService $productUpSalePriceService
     ) {
     }
 
@@ -78,14 +82,18 @@ class HandleFrontPages
                             'crossSales' => function (BelongsToMany $query): void {
                                 $query->where('ec_product_cross_sale_relations.is_variant', false);
                             },
+                            'variations.product',
+                            'defaultVariation.product',
+                            'brand',
                         ],
-                        ...EcommerceHelper::withReviewsParams(),
+                        'include_out_of_stock_products' => true,
                     ]
                 );
 
                 abort_if(! $product, 404);
 
                 $this->productCrossSalePriceService->applyProduct($product);
+                $this->productUpSalePriceService->applyProduct($product);
 
                 SeoHelper::setTitle($product->name)->setDescription($product->description);
 
@@ -106,7 +114,7 @@ class HandleFrontPages
                 $card->addMeta('label1', 'Price');
                 $card->addMeta(
                     'data1',
-                    $product->price()->displayAsText() . ' ' . strtoupper(get_application_currency()->title)
+                    $product->price()->displayAsText() . ' ' . get_application_currency()->title
                 );
                 $card->addMeta('label2', 'Website');
                 $card->addMeta('data2', SeoHelper::openGraph()->getProperty('site_name'));
@@ -115,7 +123,7 @@ class HandleFrontPages
                 SeoHelper::twitter()->setCard($card);
 
                 if (Helper::handleViewCount($product, 'viewed_product')) {
-                    event(new ProductViewed($product, Carbon::now()));
+                    event(new ProductViewed($product->getKey(), Carbon::now()));
 
                     EcommerceHelper::handleCustomerRecentlyViewedProduct($product);
                 }
@@ -125,7 +133,7 @@ class HandleFrontPages
                 $category = $product->categories->sortByDesc('id')->first();
 
                 if ($category) {
-                    if ($category->parents->count()) {
+                    if ($category->parents->isNotEmpty()) {
                         foreach ($category->parents->reverse() as $parentCategory) {
                             Theme::breadcrumb()->add($parentCategory->name, $parentCategory->url);
                         }
@@ -137,6 +145,21 @@ class HandleFrontPages
                 Theme::breadcrumb()->add($product->name);
 
                 Theme::addBodyAttributes(['class' => 'single-product']);
+
+                // Register up-sale and cross-sale assets
+                if (EcommerceHelper::isEnabledUpSaleProducts() || EcommerceHelper::isEnabledCrossSaleProducts()) {
+                    Theme::asset()->add(
+                        'front-upsale-crosssale-css',
+                        'vendor/core/plugins/ecommerce/css/front-upsale-crosssale.css',
+                        version: EcommerceHelper::getAssetVersion()
+                    );
+                    Theme::asset()->container('footer')->add(
+                        'front-upsale-crosssale-js',
+                        'vendor/core/plugins/ecommerce/js/front-upsale-crosssale.js',
+                        ['jquery'],
+                        version: EcommerceHelper::getAssetVersion()
+                    );
+                }
 
                 if (function_exists('admin_bar')) {
                     admin_bar()
@@ -159,11 +182,17 @@ class HandleFrontPages
                 );
 
                 if (! $product->is_variation && $productVariation) {
-                    $product = app(UpdateDefaultProductService::class)->updateColumns($product, $productVariation);
                     $selectedProductVariation = $productVariation->defaultVariation;
                     $selectedProductVariation->product_id = $productVariation->id;
-
                     $product->defaultVariation = $selectedProductVariation;
+
+                    if (! $product->defaultVariation->product->isOutOfStock()) {
+                        $product = app(UpdateDefaultProductService::class)->updateColumns($product, $productVariation);
+                    }
+
+                    if ($productVariation->sku) {
+                        $product->sku = $productVariation->sku;
+                    }
 
                     $product->image = $selectedProductVariation->configurableProduct->image ?: $product->image;
                 }
@@ -247,6 +276,9 @@ class HandleFrontPages
                     return $this->ajaxFilterProductsResponse($products, $response, $category);
                 }
 
+                app(GoogleTagManager::class)->viewCategory($category, $products->total());
+                app(GoogleTagManager::class)->viewItemList($products->all(), $category->name);
+
                 return [
                     'view' => 'ecommerce.product-category',
                     'default_view' => 'plugins/ecommerce::themes.product-category',
@@ -267,7 +299,8 @@ class HandleFrontPages
                     $request = request();
                 }
 
-                $request->merge(['brands' => array_merge((array) $request->input('brands', []), [$brand->getKey()])]);
+                $brands = EcommerceHelper::parseFilterParams($request, 'brands');
+                $request->merge(['brands' => array_merge($brands, [$brand->getKey()])]);
 
                 $products = app(GetProductService::class)->getProduct(
                     $request,
@@ -326,7 +359,7 @@ class HandleFrontPages
                 }
 
                 $tag = ProductTag::query()
-                    ->with(['slugable', 'products'])
+                    ->with(['slugable'])
                     ->where($condition)
                     ->firstOrFail();
 
@@ -336,8 +369,9 @@ class HandleFrontPages
 
                 $with = EcommerceHelper::withProductEagerLoadingRelations();
 
+                $tags = EcommerceHelper::parseFilterParams($request, 'tags');
                 $request->merge([
-                    'tags' => [$tag->getKey()],
+                    'tags' => array_merge($tags, [$tag->getKey()]),
                 ]);
 
                 $products = app(GetProductService::class)->getProduct($request, null, null, $with);
@@ -379,6 +413,75 @@ class HandleFrontPages
                     'data' => compact('tag', 'products'),
                     'slug' => $tag->slug,
                 ];
+
+            case ProductCollection::class:
+                $condition = [
+                    'ec_product_collections.id' => $slug->reference_id,
+                    'ec_product_collections.status' => BaseStatusEnum::PUBLISHED,
+                ];
+
+                if ($isPreview) {
+                    Arr::forget($condition, 'ec_product_collections.status');
+                }
+
+                $collection = ProductCollection::query()
+                    ->with(['slugable'])
+                    ->where($condition)
+                    ->firstOrFail();
+
+                if (! EcommerceHelper::productFilterParamsValidated($request)) {
+                    $request = request();
+                }
+
+                $with = EcommerceHelper::withProductEagerLoadingRelations();
+
+                $collections = EcommerceHelper::parseFilterParams($request, 'collections');
+                $request->merge([
+                    'collections' => array_merge($collections, [$collection->getKey()]),
+                ]);
+
+                $products = app(GetProductService::class)->getProduct($request, null, null, $with);
+
+                if ($request->ajax()) {
+                    return $this->ajaxFilterProductsResponse($products, $response);
+                }
+
+                SeoHelper::setTitle($collection->name)->setDescription($collection->description);
+
+                $meta = new SeoOpenGraph();
+                if ($collection->image) {
+                    $meta->setImage(RvMedia::getImageUrl($collection->image));
+                }
+                $meta->setDescription($collection->description);
+                $meta->setUrl($collection->url);
+                $meta->setTitle($collection->name);
+
+                SeoHelper::setSeoOpenGraph($meta);
+
+                SeoHelper::meta()->setUrl($collection->url);
+
+                Theme::breadcrumb()
+                    ->add(__('Products'), route('public.products'))
+                    ->add($collection->name);
+
+                if (function_exists('admin_bar')) {
+                    admin_bar()
+                        ->registerLink(
+                            trans('plugins/ecommerce::product-collections.edit_this_product_collection'),
+                            route('product-collections.edit', $collection->getKey()),
+                            null,
+                            'product-collections.edit'
+                        );
+                }
+
+                do_action(BASE_ACTION_PUBLIC_RENDER_SINGLE, PRODUCT_COLLECTION_MODULE_SCREEN_NAME, $collection);
+
+                return [
+                    'view' => 'ecommerce.product-collection',
+                    'default_view' => 'plugins/ecommerce::themes.product-collection',
+                    'data' => compact('collection', 'products'),
+                    'slug' => $collection->slug,
+                ];
         }
 
         return $slug;
@@ -395,8 +498,6 @@ class HandleFrontPages
             compact('total')
         );
 
-        $data = view(EcommerceHelper::viewPath('includes.product-items'), compact('products'))->render();
-
         $breadcrumbView = Theme::getThemeNamespace('partials.breadcrumbs');
 
         if (view()->exists($breadcrumbView)) {
@@ -410,6 +511,17 @@ class HandleFrontPages
         if (view()->exists($filtersView)) {
             $additional['filters_html'] = view($filtersView, compact('category'))->render();
         }
+
+        $productListingDescriptionView = EcommerceHelper::viewPath('includes.product-listing-page-description');
+
+        if ($category && view()->exists($productListingDescriptionView)) {
+            $additional['product_listing_page_description_html'] = view($productListingDescriptionView, [
+                'pageName' => $category->name,
+                'pageDescription' => $category->description ? Shortcode::compile($category->description, true)->toHtml() : null,
+            ])->render();
+        }
+
+        $data = view(EcommerceHelper::viewPath('includes.product-items'), compact('products'))->render();
 
         return $response
             ->setData($data)

@@ -5,6 +5,7 @@ namespace Botble\Ecommerce\Http\Controllers\Customers;
 use Botble\ACL\Traits\RegistersUsers;
 use Botble\Base\Facades\BaseHelper;
 use Botble\Base\Http\Controllers\BaseController;
+use Botble\Ecommerce\Events\CustomerEmailVerified;
 use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Forms\Fronts\Auth\RegisterForm;
 use Botble\Ecommerce\Http\Requests\RegisterRequest;
@@ -26,14 +27,18 @@ class RegisterController extends BaseController
 
     public function __construct()
     {
-        $this->middleware('customer.guest');
+        $this->middleware('customer.guest')->except(['confirm', 'resendConfirmation']);
     }
 
     public function showRegistrationForm()
     {
-        SeoHelper::setTitle(__('Register'));
+        abort_unless(EcommerceHelper::isCustomerRegistrationEnabled(), 404);
 
-        Theme::breadcrumb()->add(__('Register'), route('customer.register'));
+        $title = __('Register');
+        SeoHelper::setTitle(theme_option('ecommerce_register_seo_title') ?: $title)
+            ->setDescription(theme_option('ecommerce_register_seo_description'));
+
+        Theme::breadcrumb()->add($title, route('customer.register'));
 
         if (! session()->has('url.intended') &&
             ! in_array(url()->previous(), [route('customer.login'), route('customer.register')])
@@ -59,6 +64,8 @@ class RegisterController extends BaseController
 
     public function register(RegisterRequest $request)
     {
+        abort_unless(EcommerceHelper::isCustomerRegistrationEnabled(), 404);
+
         do_action('customer_register_validation', $request);
 
         /**
@@ -68,8 +75,13 @@ class RegisterController extends BaseController
 
         event(new Registered($customer));
 
-        if (EcommerceHelper::isEnableEmailVerification()) {
+        if (
+            EcommerceHelper::isEnableEmailVerification() &&
+            (! EcommerceHelper::isLoginUsingPhone() || get_ecommerce_setting('keep_email_field_in_registration_form', true))
+        ) {
             $this->registered($request, $customer);
+
+            session()->flash('ecommerce_customer_registered', true);
 
             $message = __('We have sent you an email to verify your email. Please check and confirm your email address!');
 
@@ -85,6 +97,8 @@ class RegisterController extends BaseController
 
         $this->guard()->login($customer);
 
+        session()->flash('ecommerce_customer_registered', true);
+
         return $this
             ->httpResponse()
             ->setNextUrl($this->redirectPath())
@@ -95,7 +109,7 @@ class RegisterController extends BaseController
     {
         return Customer::query()->create([
             'name' => BaseHelper::clean($data['name']),
-            'email' => BaseHelper::clean($data['email']),
+            'email' => BaseHelper::clean($data['email'] ?? null),
             'phone' => BaseHelper::clean($data['phone'] ?? null),
             'password' => Hash::make($data['password']),
         ]);
@@ -108,7 +122,13 @@ class RegisterController extends BaseController
 
     public function confirm(int|string $id, Request $request)
     {
-        abort_unless(URL::hasValidSignature($request), 404);
+        if (! URL::hasValidSignature($request)) {
+            return $this
+                ->httpResponse()
+                ->setError()
+                ->setNextUrl(route('customer.login'))
+                ->setMessage(trans('plugins/ecommerce::customer.email_verification_link_expired'));
+        }
 
         /**
          * @var Customer $customer
@@ -120,6 +140,8 @@ class RegisterController extends BaseController
 
         $this->guard()->login($customer);
 
+        CustomerEmailVerified::dispatch($customer);
+
         return $this
             ->httpResponse()
             ->setNextUrl(route('customer.overview'))
@@ -128,6 +150,10 @@ class RegisterController extends BaseController
 
     public function resendConfirmation(Request $request)
     {
+        if (! EcommerceHelper::isEnableEmailVerification()) {
+            abort(404);
+        }
+
         /**
          * @var Customer $customer
          */
@@ -137,13 +163,22 @@ class RegisterController extends BaseController
             return $this
                 ->httpResponse()
                 ->setError()
+                ->setNextUrl(route('customer.login'))
                 ->setMessage(__('Cannot find this customer!'));
+        }
+
+        if ($customer->confirmed_at) {
+            return $this
+                ->httpResponse()
+                ->setNextUrl(route('customer.login'))
+                ->setMessage(__('Your email has already been verified.'));
         }
 
         $customer->sendEmailVerificationNotification();
 
         return $this
             ->httpResponse()
+            ->setNextUrl(route('customer.login'))
             ->setMessage(__('We sent you another confirmation email. You should receive it shortly.'));
     }
 }

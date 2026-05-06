@@ -7,6 +7,7 @@ use Botble\Base\Forms\Fields\OnOffCheckboxField;
 use Botble\Base\Rules\OnOffRule;
 use Botble\Ecommerce\Forms\Settings\FlashSaleSettingForm;
 use Botble\Ecommerce\Http\Requests\Settings\FlashSaleSettingRequest;
+use Botble\Ecommerce\Models\FlashSale;
 use Botble\Ecommerce\Models\Product;
 use Botble\Ecommerce\Repositories\Interfaces\FlashSaleInterface;
 use Botble\Support\Http\Requests\Request;
@@ -42,6 +43,34 @@ class FlashSaleSupport
         return null;
     }
 
+    public function getFlashSaleForProduct(Product $product): ?FlashSale
+    {
+        if (! $this->flashSales) {
+            $this->getAvailableFlashSales();
+        }
+
+        if (! $product->getKey()) {
+            return null;
+        }
+
+        $productId = $product->id;
+        if ($product->is_variation) {
+            $productId = $product->original_product->id;
+        }
+
+        foreach ($this->flashSales as $flashSale) {
+            foreach ($flashSale->products as $flashSaleProduct) {
+                if ($productId == $flashSaleProduct->id) {
+                    $flashSale->setRelation('pivot', $flashSaleProduct->pivot);
+
+                    return $flashSale;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function getAvailableFlashSales(): Collection
     {
         if (! $this->flashSales instanceof Collection) {
@@ -49,7 +78,7 @@ class FlashSaleSupport
         }
 
         if ($this->flashSales->isEmpty()) {
-            $this->flashSales = app(FlashSaleInterface::class)->getAvailableFlashSales(['products']);
+            $this->flashSales = app(FlashSaleInterface::class)->getAvailableFlashSales(['products', 'metadata']);
         }
 
         return $this->flashSales;

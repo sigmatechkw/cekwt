@@ -1,9 +1,9 @@
-<header>
+<header class="main-header">
     {!! Theme::partial('header-top') !!}
-    <div class="logo-area mt-30 d-none d-xl-block">
+    <div class="logo-area pt-30 d-none d-xl-block">
         {!! Theme::partial('header-middle') !!}
     </div>
-    <div class="main-menu-area mt-20 d-none d-xl-block">
+    <div class="main-menu-area pt-20 d-none d-xl-block">
         <div class="for-megamenu p-relative">
             <div class="container">
                 <div class="row align-items-center">

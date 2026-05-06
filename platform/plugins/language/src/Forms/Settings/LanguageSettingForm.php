@@ -21,6 +21,9 @@ class LanguageSettingForm extends FormAbstract
 {
     public function setup(): void
     {
+        $hiddenLanguagesSetting = json_decode(setting('language_hide_languages', '[]'), true);
+        $hiddenLanguages = is_array($hiddenLanguagesSetting) ? $hiddenLanguagesSetting : [];
+
         $this
             ->model(Setting::class)
             ->setUrl(route('languages.settings'))
@@ -49,7 +52,7 @@ class LanguageSettingForm extends FormAbstract
             )
             ->add(
                 'language_switcher_display',
-                'customRadio',
+                RadioField::class,
                 RadioFieldOption::make()
                     ->label(trans('plugins/language::language.switcher_display'))
                     ->choices([
@@ -75,29 +78,39 @@ class LanguageSettingForm extends FormAbstract
                         MultiChecklistFieldOption::make()
                             ->label(trans('plugins/language::language.hide_languages'))
                             ->choices($choices)
-                            ->selected(json_decode(setting('language_hide_languages', '[]'), true))
+                            ->selected($hiddenLanguages)
                     );
             }
         }
 
-        $this->add(
-            'hide_languages_helper_display_hidden',
-            AlertField::class,
-            AlertFieldOption::make()
-                ->content(
-                    trans_choice(
-                        'plugins/language::language.hide_languages_helper_display_hidden',
-                        count(json_decode(setting('language_hide_languages', '[]'), true)),
-                        ['language' => Language::getHiddenLanguageText()]
-                    )
-                )
-        )
+        $hiddenLanguagesCount = count($hiddenLanguages);
+        $hiddenLanguagesText = Language::getHiddenLanguageText();
+
+        if ($hiddenLanguagesCount === 1) {
+            $hideLanguagesTranslation = trans(
+                'plugins/language::language.hide_languages_helper_display_hidden_singular',
+                ['language' => $hiddenLanguagesText]
+            );
+        } else {
+            $hideLanguagesTranslation = trans(
+                'plugins/language::language.hide_languages_helper_display_hidden_plural',
+                [
+                    'language' => $hiddenLanguagesText,
+                    'count' => $hiddenLanguagesCount,
+                ]
+            );
+        }
+
+        if ($hiddenLanguagesCount === 0) {
+            $hideLanguagesTranslation = trans('plugins/language::language.hide_languages_helper_display_hidden_zero');
+        }
+
+        $this
             ->add(
-                'language_show_default_item_if_current_version_not_existed',
-                OnOffCheckboxField::class,
-                OnOffFieldOption::make()
-                    ->label(trans('plugins/language::language.language_show_default_item_if_current_version_not_existed'))
-                    ->value(setting('language_show_default_item_if_current_version_not_existed', true))
+                'hide_languages_helper_display_hidden',
+                AlertField::class,
+                AlertFieldOption::make()
+                    ->content($hideLanguagesTranslation)
             )
             ->add(
                 'language_auto_detect_user_language',

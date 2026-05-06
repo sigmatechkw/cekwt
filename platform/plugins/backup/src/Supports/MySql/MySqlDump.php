@@ -330,8 +330,6 @@ class MySqlDump
     /**
      * Connect with PDO.
      *
-     * @return null
-     *
      * @throws Exception
      */
     protected function connect()

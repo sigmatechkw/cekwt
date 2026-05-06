@@ -31,7 +31,7 @@
                                             >{{ $product->name }}</a>
                                             <a
                                                 class="remove-compare-item"
-                                                href="{{ route('public.compare.remove', $product->id) }}"
+                                                href="#" data-url="{{ route('public.compare.remove', $product->id) }}"
                                             >({{ __('Remove') }})</a>
                                         </td>
                                     @endforeach
@@ -44,7 +44,7 @@
                                                 <a
                                                     class="add-to-cart"
                                                     data-id="{{ $product->id }}"
-                                                    href="{{ route('public.cart.add-to-cart') }}"
+                                                    href="#" data-url="{{ route('public.cart.add-to-cart') }}"
                                                 >
                                                     <i class="fas fa-shopping-bag"></i>
                                                 </a>
@@ -72,11 +72,7 @@
                                     <th>{{ __('Availability') }}</th>
                                     @foreach ($products as $product)
                                         <td>
-                                            @if ($product->isOutOfStock())
-                                                <span class="badge bg-danger">{{ __('Out of stock') }} </span>
-                                            @else
-                                                <span class="badge bg-success">{{ __('In stock') }}</span>
-                                            @endif
+                                            {!! $product->stock_status_html !!}
                                         </td>
                                     @endforeach
                                 </tr>
@@ -95,21 +91,22 @@
                                                         </td>
                                                     @elseif ($attributeSet->display_layout === 'text')
                                                         <td>
-                                                            <div class="attribute-values">
-                                                                <ul class="text-swatch attribute-swatch color-swatch">
+                                                            <div class="bb-product-attribute-swatch text-swatches-wrapper attribute-swatches-wrapper">
+                                                                <ul class="bb-product-attribute-swatch-list text-swatch attribute-swatch">
                                                                     @foreach ($attributes as $attribute)
                                                                         <li
-                                                                            class="attribute-swatch-item"
-                                                                            style="display: inline-block"
+                                                                            class="bb-product-attribute-swatch-item attribute-swatch-item"
+                                                                            data-slug="{{ $attribute->slug }}"
+                                                                            data-id="{{ $attribute->id }}"
                                                                         >
                                                                             <label>
                                                                                 <input
-                                                                                    class="form-control product-filter-item"
                                                                                     type="radio"
+                                                                                    value="{{ $attribute->id }}"
+                                                                                    class="product-filter-item"
                                                                                     disabled
                                                                                 >
-                                                                                <span
-                                                                                    style="cursor: default">{{ $attribute->title }}</span>
+                                                                                <span class="bb-product-attribute-text-display" style="cursor: default;">{{ $attribute->title }}</span>
                                                                             </label>
                                                                         </li>
                                                                     @endforeach

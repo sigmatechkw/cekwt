@@ -21,6 +21,8 @@ use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Models\FlashSale;
 use Botble\Ecommerce\Models\ProductCategory;
 use Botble\Ecommerce\Models\ProductCollection;
+use Botble\Faq\FaqCollection;
+use Botble\Faq\FaqSupport;
 use Botble\Faq\Models\FaqCategory;
 use Botble\Shortcode\Compilers\Shortcode as ShortcodeCompiler;
 use Botble\Shortcode\Facades\Shortcode;
@@ -95,7 +97,6 @@ app()->booted(function (): void {
                     OnOffField::class,
                     OnOffFieldOption::make()
                         ->label(__('Show slider image on mobile'))
-                        ->toArray()
                 )
                 ->add(
                     'show_ads_title',
@@ -103,7 +104,13 @@ app()->booted(function (): void {
                     OnOffFieldOption::make()
                         ->label(__('Show ads title'))
                         ->defaultValue(true)
-                        ->toArray()
+                )
+                ->add(
+                    'show_slider_text',
+                    OnOffField::class,
+                    OnOffFieldOption::make()
+                        ->label(__('Show slider text (For slider full width style)'))
+                        ->defaultValue(false)
                 )
                 ->add('open_fieldset', 'html', [
                     'html' => '<fieldset class="form-fieldset"/>',
@@ -219,13 +226,6 @@ app()->booted(function (): void {
                 $categories = ProductCategory::query()
                     ->wherePublished()
                     ->whereIn('id', $categoryIds)
-                    ->with('products', function (BelongsToMany $query): void {
-                        $reviewParams = EcommerceHelper::withReviewsParams();
-
-                        if (EcommerceHelper::isReviewEnabled()) {
-                            $query->withAvg($reviewParams['withAvg'][0], $reviewParams['withAvg'][1]);
-                        }
-                    })
                     ->get();
 
                 if ($categories->isEmpty()) {
@@ -233,7 +233,19 @@ app()->booted(function (): void {
                 }
 
                 foreach ($categories as $category) {
-                    $category->products = $category->products->take((int) $shortcode->number_of_products ?: 4);
+                    $category->load(['products' => function (BelongsToMany $query) use ($shortcode) {
+                        $reviewParams = EcommerceHelper::withReviewsParams();
+
+                        if (EcommerceHelper::isReviewEnabled()) {
+                            $query->withAvg($reviewParams['withAvg'][0], $reviewParams['withAvg'][1]);
+                        }
+
+                        $query
+                            ->wherePublished()
+                            ->orderByDesc('created_at')
+                            ->when($shortcode->random_products === 'yes', fn ($query) => $query->inRandomOrder())
+                            ->limit((int) $shortcode->number_of_products ?: 4);
+                    }]);
                 }
 
                 return Theme::partial(
@@ -262,7 +274,17 @@ app()->booted(function (): void {
                     'attr' => [
                         'placeholder' => __('Number of products per category'),
                     ],
-                ]);
+                ])
+                ->add(
+                    'random_products',
+                    SelectField::class,
+                    SelectFieldOption::make()
+                        ->label(__('Random products'))
+                        ->choices([
+                            'no' => __('No'),
+                            'yes' => __('Yes'),
+                        ])
+                );
         });
 
         Shortcode::register('products', __('Products'), __('Products'), function (ShortcodeCompiler $shortcode) {
@@ -363,8 +385,6 @@ app()->booted(function (): void {
             if (! $product) {
                 return null;
             }
-
-            Theme::asset()->container('footer')->usePath()->add('countdown-js', 'js/countdown.js');
 
             $style = ! in_array($shortcode->style, ['wooden', 'cosmetics', 'list-products']) ? 'wooden' : $shortcode->style;
 
@@ -631,13 +651,15 @@ app()->booted(function (): void {
         Shortcode::register('team', __('Team'), __('Team'), function (ShortcodeCompiler $shortcode) {
             $teamIds = Shortcode::fields()->getIds('team_ids', $shortcode);
 
-            if (! $teamIds) {
-                return null;
+            $query = Team::query()
+                ->wherePublished()
+                ->orderByDesc('created_at');
+
+            if ($teamIds) {
+                $query->whereIn('id', $teamIds);
             }
 
-            $teams = Team::query()
-                ->whereIn('id', $teamIds)
-                ->get();
+            $teams = $query->get();
 
             if ($teams->isEmpty()) {
                 return null;
@@ -655,10 +677,13 @@ app()->booted(function (): void {
                 ->add('subtitle', 'text', [
                     'label' => __('Subtitle'),
                 ])
-                ->add('team_ids', 'text', [
+                ->add('team_ids', ShortcodeTagsField::class, [
                     'label' => __('Teams'),
                     'attr' => [
                         'placeholder' => __('Choose teams'),
+                    ],
+                    'help_block' => [
+                        'text' => __('Leave empty to display all published team members.'),
                     ],
                     'choices' => Team::query()
                         ->wherePublished()
@@ -709,6 +734,12 @@ app()->booted(function (): void {
                 ->whereIn('id', $categoryIds)
                 ->with('faqs', fn (HasMany $query) => $query->wherePublished())
                 ->get();
+
+            $faqs = $categories->flatMap->faqs;
+
+            if ($faqs->isNotEmpty()) {
+                (new FaqSupport())->registerSchema(FaqCollection::make($faqs));
+            }
 
             return Theme::partial('shortcodes.faqs.index', compact('shortcode', 'categories'));
         });
@@ -837,8 +868,6 @@ app()->booted(function (): void {
     });
 
     Shortcode::register('coming-soon', __('Coming Soon'), __('Coming Soon'), function (ShortcodeCompiler $shortcode) {
-        Theme::asset()->container('footer')->usePath()->add('countdown-js', 'js/countdown.js');
-
         return Theme::partial('shortcodes.coming-soon.index', compact('shortcode'));
     });
 

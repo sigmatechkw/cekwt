@@ -1,6 +1,7 @@
 <?php
 
 use Botble\Base\Facades\BaseHelper;
+use Botble\Ecommerce\Facades\EcommerceHelper;
 use Botble\Ecommerce\Facades\ProductCategoryHelper;
 use Botble\Shortcode\View\View;
 use Botble\Theme\Theme;
@@ -56,6 +57,7 @@ return [
             $theme->asset()->container('footer')->usePath()->add('isotope-pkgd-js', 'js/isotope-pkgd.js');
             $theme->asset()->container('footer')->usePath()->add('imagesloaded-pkgd-js', 'js/imagesloaded-pkgd.js');
             $theme->asset()->container('footer')->usePath()->add('jquery-ui-js', 'plugins/jquery-ui/jquery-ui.js');
+            $theme->asset()->container('footer')->usePath()->add('countdown-js', 'js/countdown.js');
             $theme->asset()->container('footer')->usePath()->add('app-js', 'js/app.js', version: $version);
             $theme->asset()->container('footer')->usePath()->add('theme-js', 'js/theme.js', ['countdown-js'], version: $version);
             $theme->asset()->container('footer')->usePath()->add('ecommerce-js', 'js/ecommerce.js', ['lightgallery-js'], version: $version);
@@ -74,6 +76,10 @@ return [
                 ], function (View $view): void {
                     $view->withShortcodes();
                 });
+            }
+
+            if (is_plugin_active('ecommerce')) {
+                EcommerceHelper::registerThemeAssets();
             }
         },
     ],

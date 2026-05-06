@@ -3,6 +3,11 @@
 
     window.trans = window.trans || {};
 
+    window.trans['core/base::forms'] = {
+        save_and_continue: @json(trans('core/base::forms.save_and_continue')),
+        save: @json(trans('core/base::forms.save')),
+    };
+
     window.trans.discount = {
         select_type_of_discount: '{{ trans('plugins/ecommerce::discount.select_type_of_discount') }}',
         coupon_code: '{{ trans('plugins/ecommerce::discount.coupon_code') }}',
@@ -24,10 +29,12 @@
         description: '{{ trans('plugins/ecommerce::discount.description') }}',
         description_placeholder: '{{ trans('plugins/ecommerce::discount.description_placeholder') }}',
         coupon_type: '{{ trans('plugins/ecommerce::discount.coupon_type') }}',
+        discount_type: '{{ trans('plugins/ecommerce::discount.discount_type') }}',
         percentage_discount: '{{ trans('plugins/ecommerce::discount.percentage_discount') }}',
         free_shipping: '{{ trans('plugins/ecommerce::discount.free_shipping') }}',
         same_price: '{{ trans('plugins/ecommerce::discount.same_price') }}',
         apply_for: '{{ trans('plugins/ecommerce::discount.apply_for') }}',
+        apply_to: '{{ trans('plugins/ecommerce::discount.apply_to') }}',
         all_orders: '{{ trans('plugins/ecommerce::discount.all_orders') }}',
         order_amount_from: '{{ trans('plugins/ecommerce::discount.order_amount_from') }}',
         product_collection: '{{ trans('plugins/ecommerce::discount.product_collection') }}',

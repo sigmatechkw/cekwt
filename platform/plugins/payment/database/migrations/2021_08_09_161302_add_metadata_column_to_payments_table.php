@@ -7,10 +7,12 @@ use Illuminate\Support\Facades\Schema;
 return new class () extends Migration {
     public function up(): void
     {
+        if (Schema::hasColumn('payments', 'metadata')) {
+            return;
+        }
+
         Schema::table('payments', function (Blueprint $table): void {
-            if (! Schema::hasColumn('payments', 'metadata')) {
-                $table->text('metadata')->nullable();
-            }
+            $table->text('metadata')->nullable();
         });
     }
 

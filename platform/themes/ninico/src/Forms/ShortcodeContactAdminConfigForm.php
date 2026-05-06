@@ -4,6 +4,7 @@ namespace Theme\Ninico\Forms;
 
 use Botble\Base\Forms\FieldOptions\EmailFieldOption;
 use Botble\Base\Forms\FieldOptions\TextFieldOption;
+use Botble\Base\Forms\Fields\CoreIconField;
 use Botble\Base\Forms\Fields\EmailField;
 use Botble\Base\Forms\Fields\TextField;
 use Botble\Contact\Forms\ShortcodeContactAdminConfigForm as BaseShortcodeContactAdminConfigForm;
@@ -54,13 +55,13 @@ class ShortcodeContactAdminConfigForm extends BaseShortcodeContactAdminConfigFor
 
         for ($i = 1; $i <= 2; $i++) {
             $this
-                ->add('button_label_' . $i, 'text', [
+                ->add('button_label_' . $i, TextField::class, [
                     'label' => __('Button label :number', ['number' => $i]),
                 ])
-                ->add('button_url_' . $i, 'text', [
+                ->add('button_url_' . $i, TextField::class, [
                     'label' => __('Button URL :number', ['number' => $i]),
                 ])
-                ->add('button_icon_' . $i, 'themeIcon', [
+                ->add('button_icon_' . $i, CoreIconField::class, [
                     'label' => __('Button icon :number', ['number' => $i]),
                 ]);
         }

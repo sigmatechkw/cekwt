@@ -21,8 +21,9 @@ return new class () extends Migration {
         });
 
         foreach (DB::table('countries')->get() as $country) {
-            $country->code = Helper::getCountryCodeByName($country->name);
-            $country->save();
+            DB::table('countries')
+                ->where('id', $country->id)
+                ->update(['code' => Helper::getCountryCodeByName($country->name)]);
         }
     }
 };

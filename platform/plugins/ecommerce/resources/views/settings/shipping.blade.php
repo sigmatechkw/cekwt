@@ -40,7 +40,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <x-core::form.label>
                                 {{ trans('plugins/ecommerce::shipping.country') }}
-                                <strong>{{ Arr::get(EcommerceHelper::getAvailableCountries(), $shippingItem->title, $shippingItem->title) }}</strong>
+                                <strong>{{ $countryName = EcommerceHelper::getCountryNameById($shippingItem->title) }}</strong>
                             </x-core::form.label>
 
                             <div class="btn-list">
@@ -55,7 +55,7 @@
                                 <a
                                     href="javascript:void(0);"
                                     data-id="{{ $shippingItem->id }}"
-                                    data-name="{{ Arr::get(EcommerceHelper::getAvailableCountries(), $shippingItem->title, $shippingItem->title) }}"
+                                    data-name="{{ $countryName }}"
                                     class="btn-confirm-delete-region-item-modal-trigger text-danger"
                                 >
                                     {{ trans('plugins/ecommerce::shipping.delete') }}

@@ -2,14 +2,14 @@
 
 namespace Botble\Stripe\Providers;
 
-use Illuminate\Http\Request;
 use Botble\Base\Facades\Html;
-use Illuminate\Support\ServiceProvider;
-use Botble\Payment\Facades\PaymentMethods;
 use Botble\Payment\Enums\PaymentMethodEnum;
+use Botble\Payment\Facades\PaymentMethods;
+use Botble\Payment\Supports\PaymentFeeHelper;
 use Botble\Stripe\Forms\StripePaymentMethodForm;
-use Symfony\Component\HttpFoundation\Session\Session;
 use Botble\Stripe\Services\Gateways\StripePaymentService;
+use Illuminate\Http\Request;
+use Illuminate\Support\ServiceProvider;
 
 class HookServiceProvider extends ServiceProvider
 {
@@ -64,7 +64,7 @@ class HookServiceProvider extends ServiceProvider
             if ($payment->payment_channel == STRIPE_PAYMENT_METHOD_NAME) {
                 $paymentDetail = (new StripePaymentService())->getPaymentDetails($payment->charge_id);
 
-                $data = view('plugins/stripe::detail', ['payment' => $paymentDetail])->render();
+                $data .= view('plugins/stripe::detail', ['payment' => $paymentDetail])->render();
             }
 
             return $data;
@@ -97,7 +97,6 @@ class HookServiceProvider extends ServiceProvider
 
     public function checkoutWithStripe(array $data, Request $request): array
     {
-
         if ($data['type'] !== STRIPE_PAYMENT_METHOD_NAME) {
             return $data;
         }
@@ -108,15 +107,27 @@ class HookServiceProvider extends ServiceProvider
 
         $paymentData = apply_filters(PAYMENT_FILTER_PAYMENT_DATA, [], $request);
 
+        $orderAmount = $paymentData['amount'] ?? 0;
+        $paymentFee = 0;
+        if (is_plugin_active('payment')) {
+            $paymentFee = PaymentFeeHelper::calculateFee(STRIPE_PAYMENT_METHOD_NAME, $orderAmount);
+        }
+
+        $paymentData['payment_fee'] = $paymentFee;
+
+        if (! isset($paymentData['currency'])) {
+            $paymentData['currency'] = get_application_currency()->title;
+        }
+
         $supportedCurrencies = $stripePaymentService->supportedCurrencyCodes();
 
-        if (! in_array($paymentData['currency'], $supportedCurrencies) && strtoupper($currentCurrency->title) !== 'USD') {
+        if (! in_array($paymentData['currency'], $supportedCurrencies) && $currentCurrency->title !== 'USD') {
             $currencyModel = $currentCurrency->replicate();
 
             $supportedCurrency = $currencyModel->query()->where('title', 'USD')->first();
 
             if ($supportedCurrency) {
-                $paymentData['currency'] = strtoupper($supportedCurrency->title);
+                $paymentData['currency'] = $supportedCurrency->title;
                 if ($currentCurrency->is_default) {
                     $paymentData['amount'] = $paymentData['amount'] * $supportedCurrency->exchange_rate;
                 } else {
@@ -129,11 +140,10 @@ class HookServiceProvider extends ServiceProvider
             }
         }
 
-
         if (! in_array($paymentData['currency'], $supportedCurrencies)) {
             $data['error'] = true;
-            $data['message'] = __(
-                ":name doesn't support :currency. List of currencies supported by :name: :currencies.",
+            $data['message'] = trans(
+                'plugins/payment::payment.currency_not_supported',
                 [
                     'name' => 'Stripe',
                     'currency' => $paymentData['currency'],

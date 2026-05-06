@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Schema;
 return new class () extends Migration {
     public function up(): void
     {
+        if (Schema::hasColumn('ec_specification_groups', 'author_id')) {
+            return;
+        }
+
         Schema::table('ec_specification_groups', function (Blueprint $table): void {
             $table->nullableMorphs('author');
         });

@@ -12,7 +12,7 @@
                         </div>
                         <div class="rc__post-content">
                             <div class="rc__meta">
-                                <span>{{ $post->created_at->translatedFormat('M d, Y') }}</span>
+                                <span>{{ Theme::formatDate($post->created_at) }}</span>
                             </div>
                             <h3 class="rc__post-title">
                                 <a href="{{ $post->url }}">{!! BaseHelper::clean($post->name) !!}</a>

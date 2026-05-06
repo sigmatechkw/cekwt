@@ -19,13 +19,16 @@
         </div>
         <div class="col-md-6">
             <div class="text-end">
-                @include(
-                    'plugins/translation::partials.list-theme-languages-to-translate',
-                    ['groups' => $locales, 'group' => $locale, 'route' => 'translations.index']
-                )
+                @include('plugins/translation::partials.list-theme-languages-to-translate', [
+                    'groups' => $locales,
+                    'group' => $locale,
+                    'route' => 'translations.index',
+                ])
             </div>
         </div>
     </div>
+
+    @include('plugins/translation::partials.quick-filters', ['locale' => $locale])
 
     <div class="translations-table">
         {{ $translationTable->renderTable() }}

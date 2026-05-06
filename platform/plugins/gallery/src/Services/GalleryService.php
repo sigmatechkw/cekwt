@@ -62,7 +62,7 @@ class GalleryService
         do_action(BASE_ACTION_PUBLIC_RENDER_SINGLE, GALLERY_MODULE_SCREEN_NAME, $gallery);
 
         Theme::breadcrumb()
-            ->add(__('Galleries'), Gallery::getGalleriesPageUrl())
+            ->add(trans('plugins/gallery::gallery.galleries'), Gallery::getGalleriesPageUrl())
             ->add($gallery->name, $gallery->url);
 
         if (function_exists('admin_bar')) {

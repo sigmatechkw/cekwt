@@ -5,8 +5,8 @@ namespace Botble\Ecommerce\Tables;
 use Botble\Base\Facades\BaseHelper;
 use Botble\Ecommerce\Models\Order;
 use Botble\Ecommerce\Tables\Formatters\PriceFormatter;
-use Botble\Table\Actions\Action;
 use Botble\Table\Actions\DeleteAction;
+use Botble\Table\Actions\ViewAction;
 use Botble\Table\BulkActions\DeleteBulkAction;
 use Botble\Table\Columns\Column;
 use Botble\Table\Columns\CreatedAtColumn;
@@ -27,11 +27,8 @@ class OrderIncompleteTable extends OrderTable
         $this
             ->model(Order::class)
             ->addActions([
-                Action::make('view')
-                    ->icon('ti ti-eye')
-                    ->label(trans('core/base::tables.view'))
+                ViewAction::make()
                     ->route('orders.view-incomplete-order')
-                    ->color('info')
                     ->permission('orders.edit'),
                 DeleteAction::make()->route('orders.destroy'),
             ]);
@@ -46,24 +43,7 @@ class OrderIncompleteTable extends OrderTable
                 return BaseHelper::clean($item->user->name ?: $item->address->name);
             })
             ->filter(function ($query) {
-                if ($keyword = $this->request->input('search.value')) {
-                    return $query
-                        ->whereHas('address', function ($subQuery) use ($keyword) {
-                            return $subQuery
-                                ->where('name', 'LIKE', '%' . $keyword . '%')
-                                ->orWhere('email', 'LIKE', '%' . $keyword . '%')
-                                ->orWhere('phone', 'LIKE', '%' . $keyword . '%');
-                        })
-                        ->orWhereHas('user', function ($subQuery) use ($keyword) {
-                            return $subQuery
-                                ->where('name', 'LIKE', '%' . $keyword . '%')
-                                ->orWhere('email', 'LIKE', '%' . $keyword . '%')
-                                ->orWhere('phone', 'LIKE', '%' . $keyword . '%');
-                        })
-                        ->orWhere('code', 'LIKE', '%' . $keyword . '%');
-                }
-
-                return $query;
+                return $this->filterOrders($query, false);
             });
 
         return $this->toJson($data);
@@ -117,6 +97,7 @@ class OrderIncompleteTable extends OrderTable
     public function getFilters(): array
     {
         $filters = parent::getFilters();
+
         Arr::forget($filters, ['payment_method', 'payment_status', 'shipping_method']);
 
         return $filters;

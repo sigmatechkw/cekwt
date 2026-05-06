@@ -16,7 +16,7 @@
         <p class="mb-0">
             {{ $product->original_product->name }}
             @if ($product->isOutOfStock())
-                <span class="stock-status-label">({!! $product->stock_status_html !!})</span>
+                <span class="stock-status-label">({!! BaseHelper::clean($product->stock_status_html) !!})</span>
             @endif
         </p>
         @if($product->variation_attributes)
@@ -25,7 +25,7 @@
             </p>
         @endif
 
-        @if(get_ecommerce_setting('checkout_product_quantity_editable', true))
+        @if (get_ecommerce_setting('checkout_product_quantity_editable', true))
             <div
                 class="ec-checkout-quantity"
                 data-url="{{ route('public.cart.update') }}"
@@ -54,12 +54,37 @@
         ])
 
         @if (!empty($cartItem->options['options']))
-            {!! render_product_options_html($cartItem->options['options'], $product->original_price) !!}
+            {!! render_product_options_html($cartItem->options['options'], $product->front_sale_price) !!}
+        @endif
+
+        @if (EcommerceHelper::isTaxEnabled() && EcommerceHelper::isDisplayItemTaxAtCheckout() && $cartItem->taxRate > 0 && $cartItem->taxTotal > 0 && ! $cartItem->options->get('price_includes_tax', false))
+            <p class="mb-0 ec-checkout-item-tax">
+                <small class="text-muted">
+                    {{ __('Tax') }}: {{ format_price($cartItem->taxTotal) }}
+                    @if (EcommerceHelper::isDisplayCheckoutTaxInformation() && $cartItem->options && $cartItem->options->taxClasses)
+                        (
+                        @foreach ($cartItem->options->taxClasses as $taxName => $taxRate)
+                            {{ $taxName }} {{ $taxRate }}%@if (!$loop->last), @endif
+                        @endforeach
+                        )
+                    @elseif (EcommerceHelper::isDisplayCheckoutTaxInformation() && $cartItem->taxRate > 0)
+                        ({{ $cartItem->taxRate }}%)
+                    @endif
+                </small>
+            </p>
         @endif
 
         {!! apply_filters('ecommerce_cart_after_item_content', null, $cartItem) !!}
     </div>
+    @php
+        $isCheckoutItemFree = $cartItem->price == 0;
+    @endphp
     <div class="col-auto text-end">
-        <p>{{ format_price($cartItem->price) }}</p>
+        <p class="mb-1 ec-checkout-item-price">{{ $isCheckoutItemFree ? trans('plugins/ecommerce::ecommerce.free') : format_price($cartItem->price) }}</p>
+        @if (! $isCheckoutItemFree && $cartItem->qty > 1)
+            <p class="mb-0 ec-checkout-item-total">
+                <small class="text-muted">{{ __('Total') }}: {{ format_price($cartItem->total) }}</small>
+            </p>
+        @endif
     </div>
 </div>

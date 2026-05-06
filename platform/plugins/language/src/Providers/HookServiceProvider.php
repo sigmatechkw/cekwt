@@ -6,7 +6,9 @@ use Botble\Base\Facades\BaseHelper;
 use Botble\Base\Facades\Html;
 use Botble\Base\Facades\MetaBox;
 use Botble\Base\Forms\FieldOptions\HtmlFieldOption;
+use Botble\Base\Forms\FieldOptions\SelectFieldOption;
 use Botble\Base\Forms\Fields\HtmlField;
+use Botble\Base\Forms\Fields\SelectField;
 use Botble\Base\Forms\FormAbstract;
 use Botble\Base\Models\BaseModel;
 use Botble\Base\Supports\ServiceProvider;
@@ -14,6 +16,7 @@ use Botble\Language\Facades\Language;
 use Botble\Language\Models\Language as LanguageModel;
 use Botble\Language\Models\LanguageMeta;
 use Botble\Menu\Models\Menu;
+use Botble\Setting\Forms\EmailSettingForm;
 use Botble\Setting\Forms\GeneralSettingForm;
 use Botble\Table\CollectionDataTable;
 use Botble\Table\EloquentDataTable;
@@ -52,6 +55,16 @@ class HookServiceProvider extends ServiceProvider
 
         $this->app['events']->listen(RenderingThemeOptionSettings::class, function (): void {
             add_filter('theme-options-action-meta-boxes', [$this, 'addLanguageMetaBoxForThemeOptionsAndWidgets'], 55, 2);
+
+            add_filter('theme_options_is_non_default_locale', function (bool $isNonDefaultLocale): bool {
+                $currentLocale = Language::getCurrentAdminLocaleCode();
+
+                if (! $currentLocale) {
+                    return $isNonDefaultLocale;
+                }
+
+                return $currentLocale !== Language::getDefaultLocaleCode();
+            }, 55);
         });
 
         add_filter('widget-top-meta-boxes', [$this, 'addLanguageMetaBoxForThemeOptionsAndWidgets'], 55, 2);
@@ -60,6 +73,15 @@ class HookServiceProvider extends ServiceProvider
         add_filter('setting_email_template_path', [$this, 'settingEmailTemplatePath'], 55, 3);
         add_filter('setting_email_subject_key', [$this, 'settingEmailSubjectKey'], 55);
         add_filter('payment_setting_key', [$this, 'paymentSettingKey'], 55);
+        add_filter('cms_email_settings_validation_rules', function (array $rules): array {
+            return array_merge($rules, [
+                'email_default_locale' => ['nullable', 'string', 'max:20'],
+            ]);
+        }, 55);
+
+        add_filter('cms_default_email_locale', function (string $locale): string {
+            return Language::getDefaultLocale() ?: $locale;
+        }, 55);
 
         FormAbstract::beforeRendering([$this, 'changeDataBeforeRenderingForm'], 1134);
 
@@ -73,6 +95,24 @@ class HookServiceProvider extends ServiceProvider
                 );
         });
 
+        EmailSettingForm::extend(function (EmailSettingForm $form): void {
+            $localeChoices = ['' => trans('core/setting::setting.email.default_locale_auto')];
+
+            foreach (Language::getSupportedLocales() as $key => $lang) {
+                $localeChoices[$key] = $lang['lang_name'];
+            }
+
+            $form->add(
+                'email_default_locale',
+                SelectField::class,
+                SelectFieldOption::make()
+                    ->label(trans('core/setting::setting.email.default_locale'))
+                    ->choices($localeChoices)
+                    ->selected(old('email_default_locale', setting('email_default_locale', '')))
+                    ->helperText(trans('core/setting::setting.email.default_locale_helper'))
+            );
+        });
+
         add_filter('cms_language_flag', function (?string $flag, ?string $name = null) {
             if (! $name) {
                 return $flag;
@@ -84,6 +124,63 @@ class HookServiceProvider extends ServiceProvider
 
             return $flag;
         }, 50, 2);
+
+        add_filter('core_default_language', function (array $defaultLanguage) {
+            $default = Language::getDefaultLanguage();
+
+            if (! $default) {
+                return $defaultLanguage;
+            }
+
+            return [
+                'locale' => $default->lang_locale,
+                'code' => $default->lang_code,
+                'name' => $default->lang_name,
+                'flag' => $default->lang_flag,
+                'is_rtl' => $default->lang_is_rtl,
+            ];
+        }, 50);
+
+        add_filter('core_available_locales', function (array $availableLocales) {
+            if (in_array(
+                Route::currentRouteName(),
+                [
+                    'translations.locales',
+                    'translations.index',
+                    'translations.theme-translations',
+                    'tools.data-synchronize.export.theme-translations.index',
+                    'tools.data-synchronize.export.other-translations.index',
+                ]
+            )) {
+                return $availableLocales;
+            }
+
+            $languages = Language::getActiveLanguage(['lang_locale', 'lang_code', 'lang_name', 'lang_flag', 'lang_is_rtl']);
+
+            if ($languages->isEmpty()) {
+                return $availableLocales;
+            }
+
+            $availableLocales = [];
+
+            foreach ($languages as $language) {
+                $key = $language->lang_locale;
+
+                if (isset($availableLocales[$key])) {
+                    $key = $language->lang_code;
+                }
+
+                $availableLocales[$key] = [
+                    'locale' => $language->lang_locale,
+                    'code' => $language->lang_code,
+                    'name' => $language->lang_name,
+                    'flag' => $language->lang_flag,
+                    'is_rtl' => $language->lang_is_rtl,
+                ];
+            }
+
+            return $availableLocales;
+        }, 50);
     }
 
     public function settingEmailTemplateMetaBoxes(?string $data, array $params = []): string
@@ -525,6 +622,10 @@ class HookServiceProvider extends ServiceProvider
             $currentLanguage = Language::getCurrentAdminLocaleCode();
 
             foreach ($activeLanguages as $item) {
+                if (empty($item->lang_code)) {
+                    continue;
+                }
+
                 $languageButtons[] = [
                     'className' => 'change-data-language-item ' . ($item->lang_code === $currentLanguage ? 'active' : ''),
                     'text' => Html::tag(

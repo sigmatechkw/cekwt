@@ -3,9 +3,12 @@
 namespace Botble\Base\Providers;
 
 use Botble\Base\Commands\ActivateLicenseCommand;
+use Botble\Base\Commands\AutoClearCacheCommand;
+use Botble\Base\Commands\CacheWarmCommand;
 use Botble\Base\Commands\CleanupSystemCommand;
 use Botble\Base\Commands\ClearExpiredCacheCommand;
 use Botble\Base\Commands\ClearLogCommand;
+use Botble\Base\Commands\CompressImagesCommand;
 use Botble\Base\Commands\ExportDatabaseCommand;
 use Botble\Base\Commands\FetchGoogleFontsCommand;
 use Botble\Base\Commands\GoogleFontsUpdateCommand;
@@ -27,6 +30,8 @@ class CommandServiceProvider extends ServiceProvider
 
         $this->commands([
             ActivateLicenseCommand::class,
+            AutoClearCacheCommand::class,
+            CacheWarmCommand::class,
             CleanupSystemCommand::class,
             ClearExpiredCacheCommand::class,
             ClearLogCommand::class,
@@ -37,6 +42,7 @@ class CommandServiceProvider extends ServiceProvider
             PublishAssetsCommand::class,
             UpdateCommand::class,
             GoogleFontsUpdateCommand::class,
+            CompressImagesCommand::class,
         ]);
 
         AboutCommand::add('Core Information', fn () => [
@@ -45,7 +51,8 @@ class CommandServiceProvider extends ServiceProvider
         ]);
 
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule): void {
-            $schedule->command(ClearExpiredCacheCommand::class)->everyFiveMinutes();
+            $schedule->command(ClearExpiredCacheCommand::class)->daily();
+            $schedule->command(AutoClearCacheCommand::class)->hourly()->withoutOverlapping();
         });
     }
 }

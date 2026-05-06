@@ -14,5 +14,27 @@
         @endif
     </x-slot:label>
 
-    <input type="password" name="{{ $name }}" value="{{ $options['value'] }}" {!! Html::attributes($options['attr']) !!}>
+    <div class="input-group">
+        <input
+            type="password"
+            name="{{ $name }}"
+            id="{{ $name }}"
+            {!! Html::attributes($options['attr']) !!}
+            autocomplete="new-password"
+            @if (!empty($options['value']))
+                value="{{ $options['value'] }}"
+            @endif
+            data-bb-password
+        >
+        <span
+            class="input-password-toggle"
+            data-bb-toggle-password
+        >
+            <x-core::icon name="ti ti-eye" />
+        </span>
+    </div>
 </x-core::form.field>
+
+@once
+    @include('core/base::forms.fields.password-toggle-script')
+@endonce

@@ -32,6 +32,16 @@ Route::group(['namespace' => 'Botble\Media\Http\Controllers'], function (): void
                 'uses' => 'MediaController@getBreadcrumbs',
             ]);
 
+            Route::get('folder-list', [
+                'as' => 'folder_list',
+                'uses' => 'MediaController@getFolderList',
+            ]);
+
+            Route::get('folder-tree', [
+                'as' => 'folder_tree',
+                'uses' => 'MediaController@getFolderTree',
+            ]);
+
             Route::post('global-actions', [
                 'as' => 'global_actions',
                 'uses' => 'MediaController@postGlobalActions',
@@ -63,6 +73,28 @@ Route::group(['namespace' => 'Botble\Media\Http\Controllers'], function (): void
                 Route::post('create', [
                     'as' => 'folders.create',
                     'uses' => 'MediaFolderController@store',
+                ]);
+            });
+
+            Route::group(['prefix' => 'folder-permissions'], function (): void {
+                Route::get('users', [
+                    'as' => 'folder_permissions.users',
+                    'uses' => 'FolderPermissionController@users',
+                ]);
+
+                Route::get('{folder}', [
+                    'as' => 'folder_permissions.index',
+                    'uses' => 'FolderPermissionController@index',
+                ]);
+
+                Route::post('{folder}', [
+                    'as' => 'folder_permissions.store',
+                    'uses' => 'FolderPermissionController@store',
+                ]);
+
+                Route::delete('{folder}/{user}', [
+                    'as' => 'folder_permissions.destroy',
+                    'uses' => 'FolderPermissionController@destroy',
                 ]);
             });
         });

@@ -17,13 +17,6 @@
 
     $flashSale = $product->latestFlashSales()->first();
 
-    if ($flashSale) {
-         Theme::asset()
-            ->container('footer')
-            ->usePath()
-            ->add('countdown-js', 'js/countdown.js');
-    }
-
     Theme::set('pageTitle', '');
 @endphp
 
@@ -34,21 +27,21 @@
     <div class="col-lg-4 col-md-8">
         <div class="tpproduct-details__content">
             <div class="tpproduct-details__tag-area d-flex align-items-center mb-5">
-                @if ($product->isOutOfStock())
-                    <span class="tpproduct-details__tag">{{ __('Out of stock') }}</span>
-                @else
-                    @if ($product->isOnSale() && $product->sale_percent)
-                        <span class="tpproduct-details__tag" style="background-color: #328f0a; color: #fff">
-                            {{ __(':percent% off', ['percent' => $product->sale_percent]) }}
-                        </span>
-                    @endif
+                @if ($product->isOnSale() && $product->sale_percent)
+                    <span class="tpproduct-details__tag" style="background-color: #328f0a; color: #fff">
+                        {{ __(':percent% off', ['percent' => $product->sale_percent]) }}
+                    </span>
+                @endif
+
+                @if ($product->productLabels->isNotEmpty())
                     @foreach ($product->productLabels as $label)
                         <span
                             class="tpproduct-details__tag"
-                            style="background-color: {{ $label->color }}; color: #fff"
+                            {!! $label->css_styles !!}
                         >{{ $label->name }}</span>
                     @endforeach
                 @endif
+
                 @if (EcommerceHelper::isReviewEnabled())
                     <div class="tpproduct-details__rating">
                         <div class="product-rating-wrapper">
@@ -58,29 +51,26 @@
                             ></div>
                         </div>
                     </div>
-                    <a
-                        class="tpproduct-details__reviewers" href="{{ $product->url }}#reviews">{{ __(':count Reviews', ['count' => $product->reviews_count]) }}</a>
+                    <a class="tpproduct-details__reviewers" href="{{ $product->url }}#reviews" data-bb-toggle="scroll-to-review">{{ __(':count Reviews', ['count' => $product->reviews_count]) }}</a>
                 @endif
             </div>
             <div class="tpproduct-details__title-area d-flex align-items-center flex-wrap mb-5">
                 <h3 class="tpproduct-details__title">{!! BaseHelper::clean($product->name) !!}</h3>
-                @if (!$product->isOutOfStock())
-                    <span class="tpproduct-details__stock">{{ __('In Stock') }}</span>
-                @endif
-            </div>
-            <div class="tpproduct-details__price mb-30">
-                <span @class(['product-price-sale', 'd-none' => !$product->isOnSale()])>
-                    <span class="amount">{{ format_price($product->front_sale_price_with_taxes) }}</span>
-                    <del class="amount">{{ format_price($product->price_with_taxes) }}</del>
-                </span>
-                <span @class([
-                    'product-price-original',
-                    'd-none' => $product->isOnSale(),
-                    'ms-0' => !$product->isOnSale(),
-                ])>
-                    <span class="amount">{{ format_price($product->front_sale_price_with_taxes) }}</span>
+                <span class="tpproduct-details__stock mb-0">
+                    {!! $product->stock_status_html !!}
                 </span>
             </div>
+            <div class="tpproduct-details__price mb-30 mt-10">
+                @include(EcommerceHelper::viewPath('includes.product-price'), ['product' => $product])
+            </div>
+
+            @if ($product->tax_description)
+                <div class="tpproduct-details__tax-text mb-20">
+                    <small class="text-secondary">
+                        {{ $product->tax_description }}
+                    </small>
+                </div>
+            @endif
 
             {!! apply_filters('ecommerce_before_product_description', null, $product) !!}
             <div class="tpproduct-details__pera">
@@ -121,6 +111,16 @@
                 class="cart-form"
                 method="POST"
                 action="{{ route('public.cart.add-to-cart') }}"
+                data-product-id="{{ $product->id }}"
+                data-product-name="{{ $product->name }}"
+                data-product-price="{{ $product->price }}"
+                data-product-sku="{{ $product->sku }}"
+                @if($product->brand)
+                data-product-brand="{{ $product->brand->name }}"
+                @endif
+                @if($product->categories->isNotEmpty())
+                data-product-categories="{{ $product->categories->pluck('name')->implode(',') }}"
+                @endif
             >
                 @csrf
                 <input
@@ -199,7 +199,9 @@
                         <div>
                             <a
                                 class="wishlist add-to-wishlist text-muted small"
-                                href="{{ route('public.wishlist.add', $product->getKey()) }}"
+                                href="#"
+                                title="{{ __('Add to wishlist') }}"
+                                data-url="{{ route('public.wishlist.add', $product->getKey()) }}"
                             >
                                 <i class="fal fa-heart"></i>
                                 {{ __('Wishlist') }}
@@ -210,7 +212,9 @@
                         <div>
                             <a
                                 class="add-to-compare text-muted small"
-                                href="{{ route('public.compare.add', $product->id) }}"
+                                href="#"
+                                title="{{ __('Add to compare') }}"
+                                data-url="{{ route('public.compare.add', $product->getKey()) }}"
                             >
                                 <i class="fal fa-exchange"></i>
                                 {{ __('Compare') }}
@@ -264,7 +268,13 @@
     </div>
 </div>
 
-@include(Theme::getThemeNamespace('views.ecommerce.includes.cross-sale-products'), ['products' => $product->crossSaleProducts])
+@if (EcommerceHelper::isEnabledUpSaleProducts())
+    @include(EcommerceHelper::viewPath('includes.up-sale-products'), ['parentProduct' => $product])
+@endif
+
+@if (EcommerceHelper::isEnabledCrossSaleProducts())
+    @include(EcommerceHelper::viewPath('includes.cross-sale-products'), ['parentProduct' => $product])
+@endif
 
 <div class="product-details-area">
     <div class="container">
@@ -472,5 +482,7 @@
         </div>
     </div>
 
-    @include(Theme::getThemeNamespace('views.ecommerce.includes.quick-view-modal'))
+    @if (theme_option('enable_quick_view', 'yes') === 'yes')
+        @include(Theme::getThemeNamespace('views.ecommerce.includes.quick-view-modal'))
+    @endif
 @endif
