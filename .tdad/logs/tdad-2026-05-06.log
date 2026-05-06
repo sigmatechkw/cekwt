@@ -1,0 +1,27 @@
+
+================================================================================
+TDAD Session Started: 2026-05-06T13:24:08.793Z
+================================================================================
+[2026-05-06T13:24:09.190Z] [EXTENSION] 🚀 TDAD extension is now ACTIVATED! Version with comprehensive logging
+[2026-05-06T13:24:09.191Z] [EXTENSION] 📁 Log file location: c:\Users\lenovo\Documents\GitHub\cekwt\.tdad\logs\tdad-2026-05-06.log
+[2026-05-06T13:24:09.191Z] [EXTENSION] 📊 Workspace folders: c:\Users\lenovo\Documents\GitHub\cekwt
+[2026-05-06T13:24:09.191Z] [EXTENSION] Creating WorkflowController...
+[2026-05-06T13:24:09.194Z] [EXTENSION] MVP: Using simple JSON storage (.tdad/workflows/workflow.json)
+[2026-05-06T13:24:09.195Z] [EXTENSION] TDAD Extension activated successfully
+[2026-05-06T13:24:09.195Z] [EXTENSION] Registering commands...
+[2026-05-06T13:24:09.205Z] [EXTENSION] FeedbackManager: Session 112
+[2026-05-06T13:24:09.206Z] [EXTENSION] TDAD structure already initialized
+[2026-05-06T13:24:09.206Z] [EXTENSION] Auto-opening TDAD Canvas...
+[2026-05-06T13:24:09.208Z] [CANVAS] Created directory: c:\Users\lenovo\Documents\GitHub\cekwt\.tdad\workflows
+[2026-05-06T13:24:09.209Z] [CANVAS] Sprint 13: Agent Orchestrator initialized
+[2026-05-06T13:24:09.210Z] [CANVAS] [FileStatusSync] File watchers initialized
+[2026-05-06T13:24:09.211Z] [CANVAS] [FileStatusSync] Synced 0 nodes
+[2026-05-06T13:24:09.328Z] [CANVAS] WEBVIEW
+Data: Using stylesheets: index-WTAp2nbL.css
+[2026-05-06T13:24:09.329Z] [CANVAS] MVP: Canvas initialized with simple JSON storage
+[2026-05-06T13:24:09.572Z] [CANVAS] [FitView] isLoading=true, nodes.length=0, folderId=null
+[2026-05-06T13:24:09.662Z] [CANVAS] [FitView] isLoading=false, nodes.length=0, folderId=null
+[2026-05-06T13:25:14.475Z] [CANVAS] saveNow: Saving 0 nodes to folder root - statuses: []
+[2026-05-06T13:25:14.476Z] [CANVAS] [FileStatusSync] File watchers disposed
+[2026-05-06T13:25:14.562Z] [EXTENSION] Blueprint workflow created: c:\Users\lenovo\Documents\GitHub\cekwt\.tdad\workflows\root.workflow.json
+[2026-05-06T13:25:14.565Z] [EXTENSION] Scaffolded 1 files from blueprint
